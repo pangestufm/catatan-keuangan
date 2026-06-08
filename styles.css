@@ -504,8 +504,10 @@ textarea:focus {
   margin-top: 16px;
   border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line));
   border-radius: 8px;
-  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 9%, var(--surface)), var(--surface));
   padding: 16px;
+  box-shadow: var(--shadow-soft);
 }
 
 .draft-card h3 {
@@ -518,6 +520,13 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
+}
+
+.draft-grid label {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 86%, var(--surface-muted));
+  padding: 10px;
 }
 
 .draft-grid .draft-description {
@@ -1240,6 +1249,48 @@ tbody tr:last-child td {
   .trend-summary {
     grid-template-columns: 1fr;
   }
+
+  body[data-session="app"] .quick-entry-button {
+    display: none !important;
+  }
+
+  body[data-session="app"] #quickEntryModal.hidden,
+  body[data-session="app"] #quickEntryModal {
+    display: block !important;
+  }
+
+  body[data-session="login"] #quickEntryModal {
+    display: none !important;
+  }
+
+  #quickEntryModal {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    margin-bottom: 16px;
+    padding: 0;
+    background: transparent;
+  }
+
+  .quick-entry-modal {
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  #closeQuickEntryButton {
+    display: none;
+  }
+
+  .draft-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .draft-actions .ghost {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1283,28 +1334,22 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
 
-  .quick-entry-button {
-    right: 16px;
-    bottom: 16px;
-    min-width: 148px;
-    min-height: 48px;
-    padding: 0 16px;
-    font-size: 0.82rem;
-  }
-
-  .modal-backdrop {
-    align-items: end;
-    padding: 10px;
-  }
-
   .quick-entry-modal {
-    width: 100%;
-    max-height: calc(100vh - 20px);
+    padding: 16px;
   }
 
+  .draft-grid,
   .manual-grid,
   .manual-actions {
     grid-template-columns: 1fr;
+  }
+
+  .draft-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-actions .ghost {
+    grid-column: auto;
   }
 }
 

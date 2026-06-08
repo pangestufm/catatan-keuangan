@@ -237,6 +237,7 @@ function enterLocalMode() {
 }
 
 function startAppSession() {
+  document.body.dataset.session = "app";
   elements.loginScreen.classList.add("hidden");
   elements.appShell.classList.remove("hidden");
   elements.quickEntryButton.classList.remove("hidden");
@@ -255,6 +256,7 @@ function startAppSession() {
 }
 
 function showLogin() {
+  document.body.dataset.session = "login";
   elements.appShell.classList.add("hidden");
   elements.quickEntryButton.classList.add("hidden");
   closeQuickEntryModal();
