@@ -32,7 +32,6 @@
     <main class="app-shell hidden" id="appShell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Aplikasi hybrid offline / online</p>
           <h1>Catatan Keuangan</h1>
           <p class="storage-status" id="storageStatus">Mode Lokal</p>
         </div>
@@ -56,8 +55,12 @@
           <button class="button theme-toggle" id="themeToggle" type="button" title="Ganti mode terang/gelap">
             Dark Mode
           </button>
-          <button class="button secondary" id="logoutButton" type="button" title="Keluar dari workspace">
-            Keluar
+          <button class="button logout-button" id="logoutButton" type="button" title="Keluar dari workspace" aria-label="Keluar dari workspace">
+            <svg class="logout-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M10 6H6v12h4" />
+              <path d="M14 8l4 4-4 4" />
+              <path d="M8 12h10" />
+            </svg>
           </button>
         </div>
       </header>
@@ -163,6 +166,8 @@
         </div>
         <p class="empty-state hidden" id="emptyState">Belum ada transaksi yang cocok dengan filter.</p>
       </section>
+
+      <footer class="app-footer">powered by - pangestufm</footer>
     </main>
 
     <button class="quick-entry-button hidden" id="quickEntryButton" type="button" aria-label="Tambah transaksi" title="Tambah transaksi">
