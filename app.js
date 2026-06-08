@@ -3,6 +3,7 @@ const STORAGE_PREFIX = "catatan-keuangan-transactions";
 const THEME_KEY = "catatan-keuangan-theme";
 const API_TOKEN_KEY = "catatan-keuangan-api-token";
 const AUTH_KEY = "catatan-keuangan-auth";
+const LEARNING_PREFIX = "catatan-keuangan-learning";
 const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
 const DEFAULT_CATEGORIES = [
   "Gaji",
@@ -69,6 +70,7 @@ const state = {
   workspaceId: "",
   accessToken: "",
   isLocalOnly: false,
+  pendingDraft: null,
   isSyncing: false,
   syncTimer: null,
   filters: {
@@ -113,6 +115,15 @@ const elements = {
   chatInput: document.querySelector("#chatInput"),
   chatStatus: document.querySelector("#chatStatus"),
   voiceButton: document.querySelector("#voiceButton"),
+  draftCard: document.querySelector("#draftCard"),
+  draftDate: document.querySelector("#draftDate"),
+  draftType: document.querySelector("#draftType"),
+  draftCategory: document.querySelector("#draftCategory"),
+  draftAmount: document.querySelector("#draftAmount"),
+  draftDescription: document.querySelector("#draftDescription"),
+  confirmDraftButton: document.querySelector("#confirmDraftButton"),
+  editDraftButton: document.querySelector("#editDraftButton"),
+  cancelDraftButton: document.querySelector("#cancelDraftButton"),
   themeToggle: document.querySelector("#themeToggle"),
   storageStatus: document.querySelector("#storageStatus"),
   appShell: document.querySelector("#appShell"),
@@ -168,6 +179,9 @@ function bindEvents() {
   elements.importExcelInput.addEventListener("change", importExcelFile);
   elements.chatForm.addEventListener("submit", handleChatSubmit);
   elements.voiceButton.addEventListener("click", startVoiceInput);
+  elements.confirmDraftButton.addEventListener("click", confirmDraftTransaction);
+  elements.editDraftButton.addEventListener("click", editDraftManually);
+  elements.cancelDraftButton.addEventListener("click", clearDraft);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.loginForm.addEventListener("submit", handleLoginSubmit);
   elements.localModeButton.addEventListener("click", enterLocalMode);
@@ -460,6 +474,7 @@ function handleSubmit(event) {
     state.transactions.unshift(transaction);
   }
 
+  rememberCategory(transaction.description, transaction.category);
   saveTransactions();
   resetForm();
   render();
@@ -579,14 +594,9 @@ function handleChatSubmit(event) {
     return;
   }
 
-  state.transactions.unshift(createTransaction(parsed));
-  saveTransactions();
+  showDraft(parsed);
   elements.chatInput.value = "";
-  render();
-  setChatStatus(
-    `Tercatat: ${parsed.type === "income" ? "pemasukan" : "pengeluaran"} ${formatCurrency(parsed.amount)} untuk ${parsed.category} pada ${formatDate(parsed.date)}.`,
-    "success",
-  );
+  setChatStatus("Aku sudah membuat draft catatan. Cek dulu, lalu simpan atau ubah manual.", "info");
 }
 
 function startVoiceInput() {
@@ -608,7 +618,7 @@ function startVoiceInput() {
   recognition.addEventListener("result", (event) => {
     const transcript = event.results?.[0]?.[0]?.transcript || "";
     elements.chatInput.value = transcript;
-    setChatStatus(`Terdengar: "${transcript}". Mencatat transaksi...`, "info");
+    setChatStatus(`Terdengar: "${transcript}". Aku buat draft dulu untuk dikonfirmasi.`, "info");
     elements.chatForm.requestSubmit();
   });
 
@@ -624,14 +634,67 @@ function startVoiceInput() {
   recognition.start();
 }
 
+function showDraft(parsed) {
+  state.pendingDraft = parsed;
+  elements.draftDate.textContent = formatDate(parsed.date);
+  elements.draftType.textContent = parsed.type === "income" ? "Pemasukan" : "Pengeluaran";
+  elements.draftCategory.textContent = parsed.category;
+  elements.draftAmount.textContent = formatCurrency(parsed.amount);
+  elements.draftDescription.textContent = parsed.description;
+  elements.draftCard.classList.remove("hidden");
+}
+
+function confirmDraftTransaction() {
+  if (!state.pendingDraft) return;
+
+  const transaction = createTransaction(state.pendingDraft);
+  state.transactions.unshift(transaction);
+  rememberCategory(transaction.description, transaction.category);
+  saveTransactions();
+  render();
+  setChatStatus(
+    `Tersimpan: ${transaction.type === "income" ? "pemasukan" : "pengeluaran"} ${formatCurrency(transaction.amount)} untuk ${transaction.category}.`,
+    "success",
+  );
+  clearDraft(false);
+}
+
+function editDraftManually() {
+  if (!state.pendingDraft) return;
+
+  fillForm({
+    id: "",
+    date: state.pendingDraft.date,
+    type: state.pendingDraft.type,
+    category: state.pendingDraft.category,
+    description: state.pendingDraft.description,
+    amount: state.pendingDraft.amount,
+  });
+  elements.formTitle.textContent = "Koreksi Draft";
+  elements.saveButton.textContent = "Simpan Koreksi";
+  elements.cancelEditButton.classList.remove("hidden");
+  setChatStatus("Draft sudah dipindahkan ke form manual. Koreksi bagian yang perlu, lalu simpan.", "info");
+  clearDraft(false);
+  elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function clearDraft(resetStatus = true) {
+  state.pendingDraft = null;
+  elements.draftCard.classList.add("hidden");
+  if (resetStatus) {
+    setChatStatus("Aplikasi akan menebak tanggal, jenis, kategori, deskripsi, dan nominal dari kalimatmu.", "info");
+  }
+}
+
 function parseChatTransaction(text) {
   const dateCandidate = extractDateCandidate(text);
   const amountCandidate = extractAmountCandidate(text, dateCandidate);
   if (!amountCandidate) return null;
 
   const type = inferType(text);
-  const category = inferCategory(text, type);
-  const description = buildChatDescription(text, amountCandidate, dateCandidate, category);
+  const explicitCategory = extractExplicitCategory(text);
+  const category = explicitCategory?.category || inferCategory(text, type);
+  const description = buildChatDescription(text, amountCandidate, dateCandidate, category, explicitCategory);
 
   return {
     type,
@@ -640,6 +703,21 @@ function parseChatTransaction(text) {
     description,
     amount: amountCandidate.amount,
     source: "Chat",
+  };
+}
+
+function extractExplicitCategory(text) {
+  const match = text.match(/\bkategori\s+([^\d,.;]+)/i);
+  if (!match) return null;
+
+  const rawCategory = cleanText(match[1]).replace(/\b(tanggal|tgl|hari ini|kemarin|besok)\b.*$/i, "").trim();
+  if (!rawCategory) return null;
+
+  return {
+    raw: match[0],
+    start: match.index,
+    end: match.index + match[0].length,
+    category: findClosestCategory(rawCategory),
   };
 }
 
@@ -742,12 +820,13 @@ function extractAmountCandidate(text, dateCandidate) {
   return preferredCandidates[preferredCandidates.length - 1];
 }
 
-function buildChatDescription(text, amountCandidate, dateCandidate, category) {
-  let cleaned = text;
-  cleaned = removeTextRange(cleaned, amountCandidate.start, amountCandidate.end);
-  if (dateCandidate.start >= 0) {
-    cleaned = removeTextRange(cleaned, dateCandidate.start, dateCandidate.end);
-  }
+function buildChatDescription(text, amountCandidate, dateCandidate, category, explicitCategory) {
+  const ranges = [
+    { start: amountCandidate.start, end: amountCandidate.end },
+    dateCandidate.start >= 0 ? { start: dateCandidate.start, end: dateCandidate.end } : null,
+    explicitCategory?.start >= 0 ? { start: explicitCategory.start, end: explicitCategory.end } : null,
+  ].filter(Boolean);
+  let cleaned = removeTextRanges(text, ranges);
 
   cleaned = cleaned
     .replace(/\b(aku|saya|hari ini|kemarin|besok|tanggal|tgl|barusan|baru saja|catat|mencatat|transaksi|pengeluaran|pemasukan|belanja|beli|bayar|membeli|mengeluarkan|sebesar|seharga|senilai|untuk|di)\b/gi, " ")
@@ -765,6 +844,13 @@ function buildChatDescription(text, amountCandidate, dateCandidate, category) {
 function removeTextRange(text, start, end) {
   if (start < 0 || end <= start) return text;
   return `${text.slice(0, start)} ${text.slice(end)}`;
+}
+
+function removeTextRanges(text, ranges) {
+  return ranges
+    .slice()
+    .sort((a, b) => b.start - a.start)
+    .reduce((currentText, range) => removeTextRange(currentText, range.start, range.end), text);
 }
 
 function handleTableAction(event) {
@@ -1076,9 +1162,95 @@ function inferType(text) {
 
 function inferCategory(text, type) {
   const lower = text.toLowerCase();
+  const learnedCategory = inferLearnedCategory(text);
+  if (learnedCategory) return learnedCategory;
+
   const matchedRule = CATEGORY_RULES.find((rule) => rule.words.some((word) => lower.includes(word)));
   if (matchedRule) return matchedRule.category;
   return type === "income" ? "Pemasukan" : "Lainnya";
+}
+
+function findClosestCategory(input) {
+  const normalizedInput = normalizeCategoryAlias(input);
+  if (normalizedInput === "makan") return "Konsumsi Harian (Makan & Minum)";
+
+  const categories = getCategories();
+  const matchedRule = CATEGORY_RULES.find((rule) => (
+    normalizeCategoryAlias(rule.category).includes(normalizedInput)
+    || rule.words.some((word) => normalizeCategoryAlias(word).includes(normalizedInput) || normalizedInput.includes(normalizeCategoryAlias(word)))
+  ));
+  if (matchedRule) return matchedRule.category;
+
+  const exactMatch = categories.find((category) => normalizeCategoryAlias(category) === normalizedInput);
+  if (exactMatch) return exactMatch;
+
+  const partialMatch = categories.find((category) => normalizeCategoryAlias(category).includes(normalizedInput));
+  return partialMatch || toTitleCase(input);
+}
+
+function normalizeCategoryAlias(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/konsumsi harian|makan dan minum|makan & minum|makanan|minuman/g, "makan")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function rememberCategory(description, category) {
+  const words = extractLearningWords(description);
+  if (!words.length || !category) return;
+
+  const memory = loadCategoryMemory();
+  words.forEach((word) => {
+    memory[word] = memory[word] || {};
+    memory[word][category] = (memory[word][category] || 0) + 1;
+  });
+  saveCategoryMemory(memory);
+}
+
+function inferLearnedCategory(text) {
+  const memory = loadCategoryMemory();
+  const scores = new Map();
+  extractLearningWords(text).forEach((word) => {
+    Object.entries(memory[word] || {}).forEach(([category, count]) => {
+      scores.set(category, (scores.get(category) || 0) + count);
+    });
+  });
+
+  return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+function extractLearningWords(value) {
+  const ignoredWords = new Set([
+    "aku", "saya", "hari", "ini", "kemarin", "besok", "tanggal", "tgl", "catat", "transaksi",
+    "belanja", "beli", "bayar", "membeli", "pengeluaran", "pemasukan", "untuk", "kategori",
+    "sebesar", "seharga", "senilai", "rp",
+  ]);
+
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !ignoredWords.has(word))
+    .slice(0, 8);
+}
+
+function loadCategoryMemory() {
+  try {
+    const data = JSON.parse(localStorage.getItem(getLearningStorageKey()) || "{}");
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveCategoryMemory(memory) {
+  localStorage.setItem(getLearningStorageKey(), JSON.stringify(memory));
+}
+
+function getLearningStorageKey() {
+  return `${LEARNING_PREFIX}-${state.workspaceId || "lokal"}`;
 }
 
 function parseAmount(value) {

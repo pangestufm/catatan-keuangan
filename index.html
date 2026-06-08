@@ -98,6 +98,37 @@
               </div>
             </form>
             <p class="status-text" id="chatStatus">Aplikasi akan menebak tanggal, jenis, kategori, deskripsi, dan nominal dari kalimatmu.</p>
+            <div class="draft-card hidden" id="draftCard" aria-live="polite">
+              <p class="eyebrow">Konfirmasi</p>
+              <h3>Apakah catatan ini sudah benar?</h3>
+              <dl class="draft-grid">
+                <div>
+                  <dt>Tanggal</dt>
+                  <dd id="draftDate">-</dd>
+                </div>
+                <div>
+                  <dt>Jenis</dt>
+                  <dd id="draftType">-</dd>
+                </div>
+                <div>
+                  <dt>Kategori</dt>
+                  <dd id="draftCategory">-</dd>
+                </div>
+                <div>
+                  <dt>Nominal</dt>
+                  <dd id="draftAmount">-</dd>
+                </div>
+                <div class="draft-description">
+                  <dt>Keterangan</dt>
+                  <dd id="draftDescription">-</dd>
+                </div>
+              </dl>
+              <div class="draft-actions">
+                <button class="button primary" id="confirmDraftButton" type="button">Benar, Simpan</button>
+                <button class="button secondary" id="editDraftButton" type="button">Ubah Manual</button>
+                <button class="button ghost" id="cancelDraftButton" type="button">Batal</button>
+              </div>
+            </div>
           </section>
 
           <form class="panel transaction-form" id="transactionForm">

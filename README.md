@@ -97,6 +97,9 @@ Jika masih `Mode Lokal`, cek:
   - Pengeluaran: kolom E uraian, kolom F tanggal, kolom G kategori, kolom H nominal.
 - Catat cepat dari chat, contoh: `belanja pizza tanggal 4 200000`.
 - Voice input untuk catat cepat di browser yang mendukung Speech Recognition.
+- Draft konfirmasi sebelum transaksi dari chat/voice disimpan.
+- Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.
+- Pembelajaran kategori lokal per workspace dari transaksi yang dikonfirmasi atau dikoreksi.
 - Dark mode.
 - Export `.csv` untuk import ke Google Sheets.
 - Export `.xls` untuk dibuka di Microsoft Excel.

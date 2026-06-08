@@ -410,6 +410,61 @@ textarea:focus {
   background: var(--surface);
 }
 
+.draft-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  padding: 16px;
+}
+
+.draft-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.draft-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.draft-grid div {
+  min-height: 70px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.draft-grid .draft-description {
+  grid-column: 1 / -1;
+}
+
+.draft-grid dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.draft-grid dd {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-weight: 820;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.draft-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+}
+
 .category-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -724,6 +779,10 @@ tbody tr:last-child td {
   .chat-actions {
     grid-template-columns: 1fr 96px;
   }
+
+  .draft-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -756,6 +815,10 @@ tbody tr:last-child td {
   }
 
   .chat-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-grid {
     grid-template-columns: 1fr;
   }
 
