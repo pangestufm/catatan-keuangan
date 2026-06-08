@@ -73,6 +73,7 @@ const state = {
   pendingDraft: null,
   isSyncing: false,
   syncTimer: null,
+  trendMode: "daily",
   filters: {
     date: "",
   },
@@ -99,6 +100,8 @@ const elements = {
   categoryBalance: document.querySelector("#categoryBalance"),
   categoryCount: document.querySelector("#categoryCount"),
   categoryBars: document.querySelector("#categoryBars"),
+  trendModeButtons: document.querySelector("#trendModeButtons"),
+  trendChart: document.querySelector("#trendChart"),
   filterDate: document.querySelector("#filterDate"),
   clearDateFilterButton: document.querySelector("#clearDateFilterButton"),
   transactionRows: document.querySelector("#transactionRows"),
@@ -142,6 +145,13 @@ const currencyFormatter = new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 0,
 });
 
+const compactCurrencyFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 const dateFormatter = new Intl.DateTimeFormat("id-ID", {
   day: "2-digit",
   month: "short",
@@ -166,6 +176,8 @@ function bindEvents() {
   });
   elements.clearDateFilterButton.addEventListener("click", clearDateFilter);
   elements.categorySummarySelect.addEventListener("change", renderCategorySummary);
+  elements.categoryBars.addEventListener("click", handleCategoryChartClick);
+  elements.trendModeButtons.addEventListener("click", handleTrendModeChange);
   elements.exportCsvButton.addEventListener("click", exportCsv);
   elements.exportExcelButton.addEventListener("click", exportExcel);
   elements.clearButton.addEventListener("click", clearAllData);
@@ -941,6 +953,9 @@ function renderTotals() {
   elements.incomeTotal.textContent = formatCurrency(totals.income);
   elements.expenseTotal.textContent = formatCurrency(totals.expense);
   elements.balanceTotal.textContent = formatCurrency(totals.balance);
+  elements.incomeTotal.closest(".metric-card").title = `Total pemasukan: ${formatCurrency(totals.income)}`;
+  elements.expenseTotal.closest(".metric-card").title = `Total pengeluaran: ${formatCurrency(totals.expense)}`;
+  elements.balanceTotal.closest(".metric-card").title = `Saldo bersih: ${formatCurrency(totals.balance)}`;
 }
 
 function renderCategoryOptions() {
@@ -967,7 +982,12 @@ function renderCategorySummary() {
   elements.categoryExpense.textContent = formatCurrency(totals.expense);
   elements.categoryBalance.textContent = formatCurrency(totals.balance);
   elements.categoryCount.textContent = selectedTransactions.length.toString();
+  elements.categoryIncome.closest(".interactive-card").dataset.tooltip = `Pemasukan kategori: ${formatCurrency(totals.income)}`;
+  elements.categoryExpense.closest(".interactive-card").dataset.tooltip = `Pengeluaran kategori: ${formatCurrency(totals.expense)}`;
+  elements.categoryBalance.closest(".interactive-card").dataset.tooltip = `Saldo kategori: ${formatCurrency(totals.balance)}`;
+  elements.categoryCount.closest(".interactive-card").dataset.tooltip = `${selectedTransactions.length} transaksi pada pilihan ini`;
   renderCategoryBars(selectedCategory);
+  renderTrendChart(selectedCategory);
 }
 
 function renderCategoryBars(selectedCategory) {
@@ -995,30 +1015,49 @@ function renderCategoryBars(selectedCategory) {
     return;
   }
 
-  const chartRows = rows.slice(0, 7);
+  const chartRows = buildChartRows(rows);
   const total = chartRows.reduce((sum, row) => sum + row.activity, 0) || 1;
   const palette = ["#1f6f78", "#177245", "#b7443c", "#2864a6", "#9a6415", "#6f5cc2", "#2e8a99"];
-  let cursor = 0;
-  const segments = chartRows.map((row, index) => {
-    const start = cursor;
-    const portion = (row.activity / total) * 100;
-    cursor += portion;
-    return `${palette[index % palette.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
-  }).join(", ");
+  const circumference = 2 * Math.PI * 42;
+  let offset = 0;
 
   elements.categoryBars.innerHTML = `
     <div class="category-chart">
-      <div class="donut-chart" style="background: conic-gradient(${segments});">
-        <div>
+      <div class="donut-wrap" data-tooltip="${escapeHtml(`${selectedCategory === "all" ? "Total aktivitas" : selectedCategory}: ${formatCurrency(total)}`)}">
+        <svg class="donut-chart" viewBox="0 0 120 120" role="img" aria-label="Ringkasan kategori">
+          <circle class="donut-track" cx="60" cy="60" r="42"></circle>
+          ${chartRows.map((row, index) => {
+            const length = (row.activity / total) * circumference;
+            const currentOffset = offset;
+            offset += length;
+            return `
+              <circle
+                class="donut-segment"
+                cx="60"
+                cy="60"
+                r="42"
+                pathLength="${circumference}"
+                stroke="${palette[index % palette.length]}"
+                stroke-dasharray="${length.toFixed(2)} ${(circumference - length).toFixed(2)}"
+                stroke-dashoffset="${(-currentOffset).toFixed(2)}"
+                data-category="${escapeHtml(row.category)}"
+                data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}"
+              >
+                <title>${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}</title>
+              </circle>
+            `;
+          }).join("")}
+        </svg>
+        <div class="donut-center">
           <span>${selectedCategory === "all" ? "Aktivitas" : "Kategori"}</span>
-          <strong>${formatCurrency(total)}</strong>
+          <strong title="${escapeHtml(formatCurrency(total))}">${formatCompactCurrency(total)}</strong>
         </div>
       </div>
       <div class="chart-legend">
         ${chartRows.map((row, index) => {
           const percent = Math.round((row.activity / total) * 100);
           return `
-            <div class="legend-row">
+            <div class="legend-row interactive-row" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
               <span class="legend-dot" style="background:${palette[index % palette.length]}"></span>
               <span class="legend-name">${escapeHtml(row.category)}</span>
               <strong>${percent}%</strong>
@@ -1028,6 +1067,171 @@ function renderCategoryBars(selectedCategory) {
       </div>
     </div>
   `;
+}
+
+function handleCategoryChartClick(event) {
+  const target = event.target.closest("[data-category]");
+  if (!target) return;
+
+  const category = target.dataset.category;
+  if (!category || ![...elements.categorySummarySelect.options].some((option) => option.value === category)) return;
+
+  elements.categorySummarySelect.value = category;
+  renderCategorySummary();
+}
+
+function buildChartRows(rows) {
+  if (rows.length <= 7) return rows;
+
+  const visibleRows = rows.slice(0, 6);
+  const otherRows = rows.slice(6);
+  const otherTotals = otherRows.reduce((totals, row) => {
+    totals.income += row.income;
+    totals.expense += row.expense;
+    totals.activity += row.activity;
+    return totals;
+  }, { income: 0, expense: 0, activity: 0 });
+
+  return [
+    ...visibleRows,
+    { category: "Kategori Lainnya", ...otherTotals },
+  ];
+}
+
+function handleTrendModeChange(event) {
+  const button = event.target.closest("button[data-trend-mode]");
+  if (!button) return;
+
+  state.trendMode = button.dataset.trendMode;
+  [...elements.trendModeButtons.querySelectorAll("button")].forEach((item) => {
+    item.classList.toggle("is-active", item === button);
+  });
+  renderCategorySummary();
+}
+
+function renderTrendChart(selectedCategory) {
+  const source = selectedCategory === "all"
+    ? state.transactions
+    : state.transactions.filter((item) => item.category === selectedCategory);
+  const points = buildTrendPoints(source, state.trendMode);
+
+  if (!points.length) {
+    elements.trendChart.innerHTML = `<p class="empty-state">Belum ada data tren.</p>`;
+    return;
+  }
+
+  const width = 640;
+  const height = 260;
+  const pad = { top: 24, right: 24, bottom: 42, left: 58 };
+  const chartWidth = width - pad.left - pad.right;
+  const chartHeight = height - pad.top - pad.bottom;
+  const maxValue = Math.max(...points.flatMap((point) => [point.income, point.expense, Math.abs(point.balance)]), 1);
+  const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
+  const y = (value) => pad.top + chartHeight - (Math.abs(value) / maxValue) * chartHeight;
+  const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
+  const incomePath = points.map((point, index) => `${x(index)},${y(point.income)}`).join(" ");
+  const expensePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
+  const balancePath = points.map((point, index) => `${x(index)},${y(point.balance)}`).join(" ");
+  const labelIndexes = getChartLabelIndexes(points.length);
+  const latest = points[points.length - 1];
+
+  elements.trendChart.innerHTML = `
+    <div class="trend-summary">
+      <div class="interactive-card" data-tooltip="Pemasukan periode terakhir: ${escapeHtml(formatCurrency(latest.income))}">
+        <span>Pemasukan terbaru</span>
+        <strong>${formatCompactCurrency(latest.income)}</strong>
+      </div>
+      <div class="interactive-card" data-tooltip="Pengeluaran periode terakhir: ${escapeHtml(formatCurrency(latest.expense))}">
+        <span>Pengeluaran terbaru</span>
+        <strong>${formatCompactCurrency(latest.expense)}</strong>
+      </div>
+      <div class="interactive-card" data-tooltip="Saldo periode terakhir: ${escapeHtml(formatCurrency(latest.balance))}">
+        <span>Saldo terbaru</span>
+        <strong>${formatCompactCurrency(latest.balance)}</strong>
+      </div>
+    </div>
+    <div class="trend-chart-wrap">
+      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafik tren transaksi">
+        <line class="axis-line" x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${width - pad.right}" y2="${pad.top + chartHeight}"></line>
+        <line class="axis-line" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}"></line>
+        ${[0.25, 0.5, 0.75, 1].map((ratio) => {
+          const gridY = pad.top + chartHeight - ratio * chartHeight;
+          return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
+        }).join("")}
+        <polyline class="trend-line income-line" points="${incomePath}"></polyline>
+        <polyline class="trend-line expense-line" points="${expensePath}"></polyline>
+        <polyline class="trend-line balance-line" points="${balancePath}"></polyline>
+        ${points.map((point, index) => `
+          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} | Masuk ${formatCurrency(point.income)} | Keluar ${formatCurrency(point.expense)} | Saldo ${formatCurrency(point.balance)}`)}">
+            <title>${escapeHtml(`${point.label} | Masuk ${formatCurrency(point.income)} | Keluar ${formatCurrency(point.expense)} | Saldo ${formatCurrency(point.balance)}`)}</title>
+            <circle class="income-dot" cx="${x(index)}" cy="${y(point.income)}" r="5"></circle>
+            <circle class="expense-dot" cx="${x(index)}" cy="${y(point.expense)}" r="5"></circle>
+            <circle class="balance-dot" cx="${x(index)}" cy="${y(point.balance)}" r="5"></circle>
+          </g>
+        `).join("")}
+        ${labelIndexes.map((index) => `
+          <text class="axis-label" x="${x(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(points[index].label)}</text>
+        `).join("")}
+        <text class="axis-label" x="${pad.left}" y="16" text-anchor="start">${escapeHtml(formatCompactCurrency(maxValue))}</text>
+      </svg>
+    </div>
+    <div class="trend-legend">
+      <span><i class="legend-dot income-dot"></i>Pemasukan</span>
+      <span><i class="legend-dot expense-dot"></i>Pengeluaran</span>
+      <span><i class="legend-dot balance-dot"></i>Saldo</span>
+    </div>
+  `;
+}
+
+function buildTrendPoints(transactions, mode) {
+  const grouped = new Map();
+  transactions.forEach((item) => {
+    const key = getTrendKey(item.date, mode);
+    if (!key) return;
+    const current = grouped.get(key.value) || { label: key.label, sort: key.sort, income: 0, expense: 0, balance: 0 };
+    current[item.type] += item.amount;
+    current.balance = current.income - current.expense;
+    grouped.set(key.value, current);
+  });
+
+  return [...grouped.values()]
+    .sort((a, b) => a.sort.localeCompare(b.sort))
+    .slice(-12);
+}
+
+function getTrendKey(value, mode) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const monthLabel = date.toLocaleDateString("id-ID", { month: "short" });
+
+  if (mode === "yearly") {
+    return { value: `${year}`, sort: `${year}`, label: `${year}` };
+  }
+
+  if (mode === "quarterly") {
+    const quarter = Math.floor(month / 3) + 1;
+    return { value: `${year}-Q${quarter}`, sort: `${year}-${quarter}`, label: `Q${quarter} ${year}` };
+  }
+
+  if (mode === "monthly") {
+    const valueKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+    return { value: valueKey, sort: valueKey, label: `${monthLabel} ${year}` };
+  }
+
+  return {
+    value,
+    sort: value,
+    label: date.toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
+  };
+}
+
+function getChartLabelIndexes(length) {
+  if (length <= 1) return [0];
+  if (length <= 4) return Array.from({ length }, (_, index) => index);
+  return [0, Math.floor((length - 1) / 2), length - 1];
 }
 
 function renderTable() {
@@ -1436,6 +1640,10 @@ function downloadFile(filename, content, mimeType) {
 
 function formatCurrency(value) {
   return currencyFormatter.format(value);
+}
+
+function formatCompactCurrency(value) {
+  return compactCurrencyFormatter.format(value);
 }
 
 function formatDate(value) {
