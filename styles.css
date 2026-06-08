@@ -500,7 +500,7 @@ textarea:focus {
   border-radius: 999px;
   background: var(--primary-strong);
   color: #ffffff;
-  box-shadow: 0 18px 40px color-mix(in srgb, var(--primary) 36%, transparent);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   font-weight: 900;
 }
@@ -812,12 +812,6 @@ textarea:focus {
   fill: var(--red);
 }
 
-.balance-line,
-.balance-dot {
-  stroke: var(--blue);
-  fill: var(--blue);
-}
-
 .trend-point circle {
   cursor: pointer;
   stroke-width: 2;
@@ -862,10 +856,6 @@ textarea:focus {
 
 .trend-legend .expense-dot {
   background: var(--red);
-}
-
-.trend-legend .balance-dot {
-  background: var(--blue);
 }
 
 .table-section {

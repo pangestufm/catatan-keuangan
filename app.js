@@ -73,7 +73,7 @@ const state = {
   pendingDraft: null,
   isSyncing: false,
   syncTimer: null,
-  trendMode: "daily",
+  trendMode: "monthly",
   filters: {
     date: "",
   },
@@ -1125,29 +1125,28 @@ function renderTrendChart(selectedCategory) {
   const pad = { top: 24, right: 24, bottom: 42, left: 58 };
   const chartWidth = width - pad.left - pad.right;
   const chartHeight = height - pad.top - pad.bottom;
-  const maxValue = Math.max(...points.flatMap((point) => [point.income, point.expense, Math.abs(point.balance)]), 1);
+  const maxValue = Math.max(...points.flatMap((point) => [point.income, point.expense]), 1);
   const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
-  const y = (value) => pad.top + chartHeight - (Math.abs(value) / maxValue) * chartHeight;
+  const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
   const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
   const incomePath = points.map((point, index) => `${x(index)},${y(point.income)}`).join(" ");
   const expensePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
-  const balancePath = points.map((point, index) => `${x(index)},${y(point.balance)}`).join(" ");
   const labelIndexes = getChartLabelIndexes(points.length);
   const latest = points[points.length - 1];
 
   elements.trendChart.innerHTML = `
     <div class="trend-summary">
+      <div class="interactive-card" data-tooltip="Periode terakhir yang tampil di grafik">
+        <span>Periode terbaru</span>
+        <strong>${escapeHtml(latest.label)}</strong>
+      </div>
       <div class="interactive-card" data-tooltip="Pemasukan periode terakhir: ${escapeHtml(formatCurrency(latest.income))}">
-        <span>Pemasukan terbaru</span>
+        <span>Pemasukan</span>
         <strong>${formatCompactCurrency(latest.income)}</strong>
       </div>
       <div class="interactive-card" data-tooltip="Pengeluaran periode terakhir: ${escapeHtml(formatCurrency(latest.expense))}">
-        <span>Pengeluaran terbaru</span>
+        <span>Pengeluaran</span>
         <strong>${formatCompactCurrency(latest.expense)}</strong>
-      </div>
-      <div class="interactive-card" data-tooltip="Saldo periode terakhir: ${escapeHtml(formatCurrency(latest.balance))}">
-        <span>Saldo terbaru</span>
-        <strong>${formatCompactCurrency(latest.balance)}</strong>
       </div>
     </div>
     <div class="trend-chart-wrap">
@@ -1160,13 +1159,11 @@ function renderTrendChart(selectedCategory) {
         }).join("")}
         <polyline class="trend-line income-line" points="${incomePath}"></polyline>
         <polyline class="trend-line expense-line" points="${expensePath}"></polyline>
-        <polyline class="trend-line balance-line" points="${balancePath}"></polyline>
         ${points.map((point, index) => `
-          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} | Masuk ${formatCurrency(point.income)} | Keluar ${formatCurrency(point.expense)} | Saldo ${formatCurrency(point.balance)}`)}">
-            <title>${escapeHtml(`${point.label} | Masuk ${formatCurrency(point.income)} | Keluar ${formatCurrency(point.expense)} | Saldo ${formatCurrency(point.balance)}`)}</title>
+          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
+            <title>${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
             <circle class="income-dot" cx="${x(index)}" cy="${y(point.income)}" r="5"></circle>
             <circle class="expense-dot" cx="${x(index)}" cy="${y(point.expense)}" r="5"></circle>
-            <circle class="balance-dot" cx="${x(index)}" cy="${y(point.balance)}" r="5"></circle>
           </g>
         `).join("")}
         ${labelIndexes.map((index) => `
@@ -1178,7 +1175,6 @@ function renderTrendChart(selectedCategory) {
     <div class="trend-legend">
       <span><i class="legend-dot income-dot"></i>Pemasukan</span>
       <span><i class="legend-dot expense-dot"></i>Pengeluaran</span>
-      <span><i class="legend-dot balance-dot"></i>Saldo</span>
     </div>
   `;
 }
@@ -1188,9 +1184,8 @@ function buildTrendPoints(transactions, mode) {
   transactions.forEach((item) => {
     const key = getTrendKey(item.date, mode);
     if (!key) return;
-    const current = grouped.get(key.value) || { label: key.label, sort: key.sort, income: 0, expense: 0, balance: 0 };
+    const current = grouped.get(key.value) || { label: key.label, sort: key.sort, income: 0, expense: 0 };
     current[item.type] += item.amount;
-    current.balance = current.income - current.expense;
     grouped.set(key.value, current);
   });
 
@@ -1216,16 +1211,8 @@ function getTrendKey(value, mode) {
     return { value: `${year}-Q${quarter}`, sort: `${year}-${quarter}`, label: `Q${quarter} ${year}` };
   }
 
-  if (mode === "monthly") {
-    const valueKey = `${year}-${String(month + 1).padStart(2, "0")}`;
-    return { value: valueKey, sort: valueKey, label: `${monthLabel} ${year}` };
-  }
-
-  return {
-    value,
-    sort: value,
-    label: date.toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
-  };
+  const valueKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+  return { value: valueKey, sort: valueKey, label: `${monthLabel} ${year}` };
 }
 
 function getChartLabelIndexes(length) {
