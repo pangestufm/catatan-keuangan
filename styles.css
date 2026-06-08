@@ -926,6 +926,72 @@ tbody tr:hover td {
   background: color-mix(in srgb, var(--surface-muted) 56%, transparent);
 }
 
+.date-group-row td {
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  border-top: 1px solid color-mix(in srgb, var(--primary) 26%, var(--line));
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.date-group-row:hover td {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.date-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.date-group-heading span,
+.date-group-heading strong {
+  display: block;
+}
+
+.date-group-heading > div:first-child span {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.date-group-heading > div:first-child strong {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
+.date-group-totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.date-group-totals span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.date-group-totals .income-total {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.date-group-totals .expense-total {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.transaction-row td:first-child {
+  width: 36px;
+  padding: 0;
+}
+
 tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -1136,6 +1202,15 @@ tbody tr:last-child td {
   .filters {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .date-group-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .date-group-totals {
+    justify-content: flex-start;
   }
 
   .chat-actions {

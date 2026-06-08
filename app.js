@@ -1238,20 +1238,36 @@ function renderTable() {
   const rows = getFilteredTransactions();
 
   elements.emptyState.classList.toggle("hidden", rows.length > 0);
-  elements.transactionRows.innerHTML = rows.map((item) => `
-    <tr>
-      <td>${formatDate(item.date)}</td>
-      <td><span class="type-pill ${item.type}">${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
-      <td>${escapeHtml(item.category)}</td>
-      <td>${escapeHtml(item.description)}</td>
-      <td class="numeric">${formatCurrency(item.amount)}</td>
-      <td>
-        <div class="row-actions">
-          <button class="icon-button" type="button" title="Edit transaksi" data-action="edit" data-id="${item.id}">Edit</button>
-          <button class="icon-button delete" type="button" title="Hapus transaksi" data-action="delete" data-id="${item.id}">Del</button>
+  elements.transactionRows.innerHTML = groupTransactionsByDate(rows).map((group) => `
+    <tr class="date-group-row">
+      <td colspan="6">
+        <div class="date-group-heading">
+          <div>
+            <span>${formatDate(group.date)}</span>
+            <strong>${group.items.length} transaksi</strong>
+          </div>
+          <div class="date-group-totals">
+            <span class="income-total">Masuk ${formatCurrency(group.totals.income)}</span>
+            <span class="expense-total">Keluar ${formatCurrency(group.totals.expense)}</span>
+          </div>
         </div>
       </td>
     </tr>
+    ${group.items.map((item) => `
+      <tr class="transaction-row">
+        <td></td>
+        <td><span class="type-pill ${item.type}">${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
+        <td>${escapeHtml(item.category)}</td>
+        <td>${escapeHtml(item.description)}</td>
+        <td class="numeric">${formatCurrency(item.amount)}</td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-button" type="button" title="Edit transaksi" data-action="edit" data-id="${item.id}">Edit</button>
+            <button class="icon-button delete" type="button" title="Hapus transaksi" data-action="delete" data-id="${item.id}">Del</button>
+          </div>
+        </td>
+      </tr>
+    `).join("")}
   `).join("");
 }
 
@@ -1261,6 +1277,26 @@ function getFilteredTransactions() {
       return !state.filters.date || item.date === state.filters.date;
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
+function groupTransactionsByDate(transactions) {
+  const grouped = new Map();
+
+  transactions.forEach((item) => {
+    if (!grouped.has(item.date)) {
+      grouped.set(item.date, {
+        date: item.date,
+        items: [],
+        totals: { income: 0, expense: 0 },
+      });
+    }
+
+    const group = grouped.get(item.date);
+    group.items.push(item);
+    group.totals[item.type] += item.amount;
+  });
+
+  return [...grouped.values()];
 }
 
 function clearDateFilter() {
