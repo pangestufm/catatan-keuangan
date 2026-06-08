@@ -79,58 +79,6 @@
 
       <section class="workspace-grid">
         <div class="left-stack">
-          <section class="panel chat-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Chat input</p>
-                <h2>Catat Cepat</h2>
-              </div>
-            </div>
-
-            <form class="chat-form" id="chatForm">
-              <label>
-                Tulis transaksi
-                <textarea id="chatInput" rows="3" placeholder="Contoh: aku hari ini belanja makanan 10000"></textarea>
-              </label>
-              <div class="chat-actions">
-                <button class="button primary" type="submit">Catat dari Chat</button>
-                <button class="button secondary voice-button" id="voiceButton" type="button">Voice</button>
-              </div>
-            </form>
-            <p class="status-text" id="chatStatus">Aplikasi akan menebak tanggal, jenis, kategori, deskripsi, dan nominal dari kalimatmu.</p>
-            <div class="draft-card hidden" id="draftCard" aria-live="polite">
-              <p class="eyebrow">Konfirmasi</p>
-              <h3>Apakah catatan ini sudah benar?</h3>
-              <dl class="draft-grid">
-                <div>
-                  <dt>Tanggal</dt>
-                  <dd id="draftDate">-</dd>
-                </div>
-                <div>
-                  <dt>Jenis</dt>
-                  <dd id="draftType">-</dd>
-                </div>
-                <div>
-                  <dt>Kategori</dt>
-                  <dd id="draftCategory">-</dd>
-                </div>
-                <div>
-                  <dt>Nominal</dt>
-                  <dd id="draftAmount">-</dd>
-                </div>
-                <div class="draft-description">
-                  <dt>Keterangan</dt>
-                  <dd id="draftDescription">-</dd>
-                </div>
-              </dl>
-              <div class="draft-actions">
-                <button class="button primary" id="confirmDraftButton" type="button">Benar, Simpan</button>
-                <button class="button secondary" id="editDraftButton" type="button">Ubah Manual</button>
-                <button class="button ghost" id="cancelDraftButton" type="button">Batal</button>
-              </div>
-            </div>
-          </section>
-
           <form class="panel transaction-form" id="transactionForm">
             <div class="panel-heading">
               <div>
@@ -222,13 +170,11 @@
             <h2>Transaksi</h2>
           </div>
           <div class="filters" aria-label="Filter transaksi">
-            <input id="searchInput" type="search" placeholder="Cari deskripsi atau kategori" />
-            <select id="filterType">
-              <option value="all">Semua jenis</option>
-              <option value="income">Pemasukan</option>
-              <option value="expense">Pengeluaran</option>
-            </select>
-            <input id="filterMonth" type="month" />
+            <label class="compact-filter">
+              Tanggal
+              <input id="filterDate" type="date" />
+            </label>
+            <button class="button secondary" id="clearDateFilterButton" type="button">Semua Tanggal</button>
           </div>
         </div>
 
@@ -250,6 +196,69 @@
         <p class="empty-state hidden" id="emptyState">Belum ada transaksi yang cocok dengan filter.</p>
       </section>
     </main>
+
+    <button class="quick-entry-button hidden" id="quickEntryButton" type="button" aria-label="Buka catat cepat">
+      Catat
+    </button>
+
+    <section class="modal-backdrop hidden" id="quickEntryModal" aria-modal="true" role="dialog" aria-labelledby="quickEntryTitle">
+      <div class="quick-entry-modal">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Chat / voice</p>
+            <h2 id="quickEntryTitle">Catat Cepat</h2>
+          </div>
+          <button class="icon-button" id="closeQuickEntryButton" type="button" aria-label="Tutup catat cepat">X</button>
+        </div>
+
+        <form class="chat-form" id="chatForm">
+          <label>
+            Tulis atau ucapkan transaksi
+            <textarea id="chatInput" rows="3" placeholder="Contoh: belanja pizza tanggal 4 200000 kategori makanan"></textarea>
+          </label>
+          <div class="chat-actions">
+            <button class="button primary" type="submit">Buat Draft</button>
+            <button class="button secondary voice-button" id="voiceButton" type="button">Voice</button>
+          </div>
+        </form>
+        <p class="status-text" id="chatStatus">Aplikasi akan membuat draft dulu sebelum transaksi disimpan.</p>
+
+        <form class="draft-card hidden" id="draftCard" aria-live="polite">
+          <p class="eyebrow">Konfirmasi</p>
+          <h3>Edit jika perlu, lalu simpan</h3>
+          <div class="draft-grid">
+            <label>
+              Tanggal
+              <input id="draftDateInput" type="date" required />
+            </label>
+            <label>
+              Jenis
+              <select id="draftTypeInput" required>
+                <option value="income">Pemasukan</option>
+                <option value="expense">Pengeluaran</option>
+              </select>
+            </label>
+            <label>
+              Kategori
+              <input id="draftCategoryInput" list="categoryList" required />
+            </label>
+            <label>
+              Nominal
+              <input id="draftAmountInput" type="number" min="0" step="100" required />
+            </label>
+            <label class="draft-description">
+              Keterangan
+              <input id="draftDescriptionInput" type="text" required />
+            </label>
+          </div>
+          <div class="draft-actions">
+            <button class="button primary" id="confirmDraftButton" type="button">Simpan Draft</button>
+            <button class="button secondary" id="editDraftButton" type="button">Pindah ke Form</button>
+            <button class="button ghost" id="cancelDraftButton" type="button">Batal</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
     <script src="vendor/xlsx.full.min.js"></script>
     <script src="app.js"></script>

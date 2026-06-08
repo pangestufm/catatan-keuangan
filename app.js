@@ -74,9 +74,7 @@ const state = {
   isSyncing: false,
   syncTimer: null,
   filters: {
-    search: "",
-    type: "all",
-    month: "",
+    date: "",
   },
 };
 
@@ -101,9 +99,8 @@ const elements = {
   categoryBalance: document.querySelector("#categoryBalance"),
   categoryCount: document.querySelector("#categoryCount"),
   categoryBars: document.querySelector("#categoryBars"),
-  searchInput: document.querySelector("#searchInput"),
-  filterType: document.querySelector("#filterType"),
-  filterMonth: document.querySelector("#filterMonth"),
+  filterDate: document.querySelector("#filterDate"),
+  clearDateFilterButton: document.querySelector("#clearDateFilterButton"),
   transactionRows: document.querySelector("#transactionRows"),
   emptyState: document.querySelector("#emptyState"),
   exportCsvButton: document.querySelector("#exportCsvButton"),
@@ -116,14 +113,17 @@ const elements = {
   chatStatus: document.querySelector("#chatStatus"),
   voiceButton: document.querySelector("#voiceButton"),
   draftCard: document.querySelector("#draftCard"),
-  draftDate: document.querySelector("#draftDate"),
-  draftType: document.querySelector("#draftType"),
-  draftCategory: document.querySelector("#draftCategory"),
-  draftAmount: document.querySelector("#draftAmount"),
-  draftDescription: document.querySelector("#draftDescription"),
+  draftDateInput: document.querySelector("#draftDateInput"),
+  draftTypeInput: document.querySelector("#draftTypeInput"),
+  draftCategoryInput: document.querySelector("#draftCategoryInput"),
+  draftAmountInput: document.querySelector("#draftAmountInput"),
+  draftDescriptionInput: document.querySelector("#draftDescriptionInput"),
   confirmDraftButton: document.querySelector("#confirmDraftButton"),
   editDraftButton: document.querySelector("#editDraftButton"),
   cancelDraftButton: document.querySelector("#cancelDraftButton"),
+  quickEntryButton: document.querySelector("#quickEntryButton"),
+  quickEntryModal: document.querySelector("#quickEntryModal"),
+  closeQuickEntryButton: document.querySelector("#closeQuickEntryButton"),
   themeToggle: document.querySelector("#themeToggle"),
   storageStatus: document.querySelector("#storageStatus"),
   appShell: document.querySelector("#appShell"),
@@ -160,18 +160,11 @@ function initialize() {
 function bindEvents() {
   elements.form.addEventListener("submit", handleSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
-  elements.searchInput.addEventListener("input", (event) => {
-    state.filters.search = event.target.value.trim().toLowerCase();
+  elements.filterDate.addEventListener("change", (event) => {
+    state.filters.date = event.target.value;
     renderTable();
   });
-  elements.filterType.addEventListener("change", (event) => {
-    state.filters.type = event.target.value;
-    renderTable();
-  });
-  elements.filterMonth.addEventListener("change", (event) => {
-    state.filters.month = event.target.value;
-    renderTable();
-  });
+  elements.clearDateFilterButton.addEventListener("click", clearDateFilter);
   elements.categorySummarySelect.addEventListener("change", renderCategorySummary);
   elements.exportCsvButton.addEventListener("click", exportCsv);
   elements.exportExcelButton.addEventListener("click", exportExcel);
@@ -182,6 +175,9 @@ function bindEvents() {
   elements.confirmDraftButton.addEventListener("click", confirmDraftTransaction);
   elements.editDraftButton.addEventListener("click", editDraftManually);
   elements.cancelDraftButton.addEventListener("click", clearDraft);
+  elements.quickEntryButton.addEventListener("click", openQuickEntryModal);
+  elements.closeQuickEntryButton.addEventListener("click", closeQuickEntryModal);
+  elements.quickEntryModal.addEventListener("click", closeQuickEntryFromBackdrop);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.loginForm.addEventListener("submit", handleLoginSubmit);
   elements.localModeButton.addEventListener("click", enterLocalMode);
@@ -231,6 +227,7 @@ function enterLocalMode() {
 function startAppSession() {
   elements.loginScreen.classList.add("hidden");
   elements.appShell.classList.remove("hidden");
+  elements.quickEntryButton.classList.remove("hidden");
   state.transactions = loadTransactions();
   saveLocalTransactions();
   resetForm();
@@ -247,6 +244,8 @@ function startAppSession() {
 
 function showLogin() {
   elements.appShell.classList.add("hidden");
+  elements.quickEntryButton.classList.add("hidden");
+  closeQuickEntryModal();
   elements.loginScreen.classList.remove("hidden");
   elements.workspaceInput.focus();
 }
@@ -261,6 +260,21 @@ function logout() {
   elements.accessTokenInput.value = "";
   render();
   showLogin();
+}
+
+function openQuickEntryModal() {
+  elements.quickEntryModal.classList.remove("hidden");
+  elements.chatInput.focus();
+}
+
+function closeQuickEntryModal() {
+  elements.quickEntryModal.classList.add("hidden");
+}
+
+function closeQuickEntryFromBackdrop(event) {
+  if (event.target === elements.quickEntryModal) {
+    closeQuickEntryModal();
+  }
 }
 
 function saveSession() {
@@ -636,18 +650,33 @@ function startVoiceInput() {
 
 function showDraft(parsed) {
   state.pendingDraft = parsed;
-  elements.draftDate.textContent = formatDate(parsed.date);
-  elements.draftType.textContent = parsed.type === "income" ? "Pemasukan" : "Pengeluaran";
-  elements.draftCategory.textContent = parsed.category;
-  elements.draftAmount.textContent = formatCurrency(parsed.amount);
-  elements.draftDescription.textContent = parsed.description;
+  elements.draftDateInput.value = parsed.date;
+  elements.draftTypeInput.value = parsed.type;
+  elements.draftCategoryInput.value = parsed.category;
+  elements.draftAmountInput.value = parsed.amount;
+  elements.draftDescriptionInput.value = parsed.description;
   elements.draftCard.classList.remove("hidden");
 }
 
 function confirmDraftTransaction() {
   if (!state.pendingDraft) return;
 
-  const transaction = createTransaction(state.pendingDraft);
+  const amount = Number(elements.draftAmountInput.value);
+  const draft = {
+    ...state.pendingDraft,
+    date: elements.draftDateInput.value,
+    type: elements.draftTypeInput.value,
+    category: elements.draftCategoryInput.value.trim(),
+    description: elements.draftDescriptionInput.value.trim(),
+    amount,
+  };
+
+  if (!draft.date || !draft.category || !draft.description || !Number.isFinite(amount) || amount <= 0) {
+    setChatStatus("Lengkapi tanggal, kategori, keterangan, dan nominal yang valid sebelum menyimpan.", "error");
+    return;
+  }
+
+  const transaction = createTransaction(draft);
   state.transactions.unshift(transaction);
   rememberCategory(transaction.description, transaction.category);
   saveTransactions();
@@ -657,6 +686,7 @@ function confirmDraftTransaction() {
     "success",
   );
   clearDraft(false);
+  closeQuickEntryModal();
 }
 
 function editDraftManually() {
@@ -664,17 +694,18 @@ function editDraftManually() {
 
   fillForm({
     id: "",
-    date: state.pendingDraft.date,
-    type: state.pendingDraft.type,
-    category: state.pendingDraft.category,
-    description: state.pendingDraft.description,
-    amount: state.pendingDraft.amount,
+    date: elements.draftDateInput.value,
+    type: elements.draftTypeInput.value,
+    category: elements.draftCategoryInput.value,
+    description: elements.draftDescriptionInput.value,
+    amount: elements.draftAmountInput.value,
   });
   elements.formTitle.textContent = "Koreksi Draft";
   elements.saveButton.textContent = "Simpan Koreksi";
   elements.cancelEditButton.classList.remove("hidden");
   setChatStatus("Draft sudah dipindahkan ke form manual. Koreksi bagian yang perlu, lalu simpan.", "info");
   clearDraft(false);
+  closeQuickEntryModal();
   elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1023,13 +1054,15 @@ function renderTable() {
 function getFilteredTransactions() {
   return state.transactions
     .filter((item) => {
-      const searchable = `${item.category} ${item.description}`.toLowerCase();
-      const matchesSearch = !state.filters.search || searchable.includes(state.filters.search);
-      const matchesType = state.filters.type === "all" || item.type === state.filters.type;
-      const matchesMonth = !state.filters.month || item.date.startsWith(state.filters.month);
-      return matchesSearch && matchesType && matchesMonth;
+      return !state.filters.date || item.date === state.filters.date;
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
+function clearDateFilter() {
+  state.filters.date = "";
+  elements.filterDate.value = "";
+  renderTable();
 }
 
 function calculateTotals(transactions) {
