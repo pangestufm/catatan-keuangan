@@ -535,39 +535,41 @@ textarea:focus {
   right: 22px;
   bottom: 22px;
   z-index: 30;
-  min-width: 178px;
-  min-height: 50px;
+  min-width: 176px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--primary) 28%, #ffffff);
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--line));
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--primary-strong), color-mix(in srgb, var(--primary) 84%, #ffffff));
+  background: linear-gradient(135deg, #155961, #1f6f78);
   color: #ffffff;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 22px rgba(10, 22, 27, 0.2);
   cursor: pointer;
-  padding: 0 18px 0 14px;
+  padding: 0 18px 0 15px;
   font-weight: 900;
   letter-spacing: 0;
 }
 
-.quick-entry-button::before {
-  content: "+";
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
+.quick-entry-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   border-radius: 999px;
-  background: color-mix(in srgb, #ffffff 92%, transparent);
-  color: var(--primary-strong);
-  font-size: 1.12rem;
-  line-height: 1;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.74);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.35;
+  padding: 4px;
 }
 
 .quick-entry-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+  background: linear-gradient(135deg, #124b52, #1b636b);
+  box-shadow: 0 12px 26px rgba(10, 22, 27, 0.24);
 }
 
 .modal-backdrop {
