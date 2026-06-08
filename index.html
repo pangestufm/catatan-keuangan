@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catatan Keuangan</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Aplikasi hybrid offline / online</p>
+          <h1>Catatan Keuangan</h1>
+          <p class="storage-status" id="storageStatus">Mode Lokal</p>
+        </div>
+        <div class="topbar-actions" aria-label="Aksi data">
+          <label class="button secondary file-button" title="Import transaksi dari Excel">
+            <span aria-hidden="true">IMP</span>
+            Import Excel
+            <input id="importExcelInput" type="file" accept=".xlsx,.xls" hidden />
+          </label>
+          <button class="button secondary" id="exportCsvButton" type="button" title="Export CSV untuk Google Sheets">
+            <span aria-hidden="true">CSV</span>
+            Google Sheets
+          </button>
+          <button class="button secondary" id="exportExcelButton" type="button" title="Export file Excel">
+            <span aria-hidden="true">XLS</span>
+            Excel
+          </button>
+          <button class="button danger" id="clearButton" type="button" title="Hapus semua data lokal">
+            Hapus Data
+          </button>
+          <button class="button theme-toggle" id="themeToggle" type="button" title="Ganti mode terang/gelap">
+            Dark Mode
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Ringkasan keuangan">
+        <article class="metric-card income">
+          <p>Total Pemasukan</p>
+          <strong id="incomeTotal">Rp0</strong>
+        </article>
+        <article class="metric-card expense">
+          <p>Total Pengeluaran</p>
+          <strong id="expenseTotal">Rp0</strong>
+        </article>
+        <article class="metric-card balance">
+          <p>Saldo Bersih</p>
+          <strong id="balanceTotal">Rp0</strong>
+        </article>
+      </section>
+
+      <section class="workspace-grid">
+        <div class="left-stack">
+          <section class="panel chat-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Chat input</p>
+                <h2>Catat Cepat</h2>
+              </div>
+            </div>
+
+            <form class="chat-form" id="chatForm">
+              <label>
+                Tulis transaksi
+                <textarea id="chatInput" rows="3" placeholder="Contoh: aku hari ini belanja makanan 10000"></textarea>
+              </label>
+              <div class="chat-actions">
+                <button class="button primary" type="submit">Catat dari Chat</button>
+                <button class="button secondary voice-button" id="voiceButton" type="button">Voice</button>
+              </div>
+            </form>
+            <p class="status-text" id="chatStatus">Aplikasi akan menebak tanggal, jenis, kategori, deskripsi, dan nominal dari kalimatmu.</p>
+          </section>
+
+          <form class="panel transaction-form" id="transactionForm">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Input manual</p>
+                <h2 id="formTitle">Tambah Transaksi</h2>
+              </div>
+              <button class="button ghost hidden" id="cancelEditButton" type="button">Batal Edit</button>
+            </div>
+
+            <input type="hidden" id="transactionId" />
+
+            <label>
+              Tanggal
+              <input id="dateInput" name="date" type="date" required />
+            </label>
+
+            <label>
+              Jenis
+              <select id="typeInput" name="type" required>
+                <option value="income">Pemasukan</option>
+                <option value="expense">Pengeluaran</option>
+              </select>
+            </label>
+
+            <label>
+              Kategori
+              <input id="categoryInput" name="category" list="categoryList" placeholder="Contoh: Gaji, Makan, Transport" required />
+              <datalist id="categoryList"></datalist>
+            </label>
+
+            <label>
+              Deskripsi
+              <input id="descriptionInput" name="description" type="text" placeholder="Keterangan transaksi" required />
+            </label>
+
+            <label>
+              Nominal
+              <input id="amountInput" name="amount" type="number" min="0" step="100" placeholder="0" required />
+            </label>
+
+            <button class="button primary" id="saveButton" type="submit">Simpan Transaksi</button>
+          </form>
+        </div>
+
+        <aside class="panel category-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Kategori</p>
+              <h2>Ringkasan Pilihan</h2>
+            </div>
+          </div>
+
+          <label>
+            Tampilkan kategori
+            <select id="categorySummarySelect">
+              <option value="all">Semua kategori</option>
+            </select>
+          </label>
+
+          <div class="category-stat-grid">
+            <div>
+              <span>Pemasukan</span>
+              <strong id="categoryIncome">Rp0</strong>
+            </div>
+            <div>
+              <span>Pengeluaran</span>
+              <strong id="categoryExpense">Rp0</strong>
+            </div>
+            <div>
+              <span>Saldo</span>
+              <strong id="categoryBalance">Rp0</strong>
+            </div>
+            <div>
+              <span>Transaksi</span>
+              <strong id="categoryCount">0</strong>
+            </div>
+          </div>
+
+          <div class="bar-list" id="categoryBars" aria-label="Rincian per kategori"></div>
+        </aside>
+      </section>
+
+      <p class="status-banner hidden" id="importStatus"></p>
+
+      <section class="panel table-section">
+        <div class="panel-heading table-heading">
+          <div>
+            <p class="eyebrow">Detail</p>
+            <h2>Transaksi</h2>
+          </div>
+          <div class="filters" aria-label="Filter transaksi">
+            <input id="searchInput" type="search" placeholder="Cari deskripsi atau kategori" />
+            <select id="filterType">
+              <option value="all">Semua jenis</option>
+              <option value="income">Pemasukan</option>
+              <option value="expense">Pengeluaran</option>
+            </select>
+            <input id="filterMonth" type="month" />
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Jenis</th>
+                <th>Kategori</th>
+                <th>Deskripsi</th>
+                <th class="numeric">Nominal</th>
+                <th class="actions-column">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="transactionRows"></tbody>
+          </table>
+        </div>
+        <p class="empty-state hidden" id="emptyState">Belum ada transaksi yang cocok dengan filter.</p>
+      </section>
+    </main>
+
+    <script src="vendor/xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
