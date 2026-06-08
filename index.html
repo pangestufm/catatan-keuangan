@@ -77,103 +77,56 @@
         </article>
       </section>
 
-      <section class="workspace-grid">
-        <div class="left-stack">
-          <form class="panel transaction-form" id="transactionForm">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Input manual</p>
-                <h2 id="formTitle">Tambah Transaksi</h2>
-              </div>
-              <button class="button ghost hidden" id="cancelEditButton" type="button">Batal Edit</button>
-            </div>
-
-            <input type="hidden" id="transactionId" />
-
-            <label>
-              Tanggal
-              <input id="dateInput" name="date" type="date" required />
-            </label>
-
-            <label>
-              Jenis
-              <select id="typeInput" name="type" required>
-                <option value="income">Pemasukan</option>
-                <option value="expense">Pengeluaran</option>
-              </select>
-            </label>
-
-            <label>
-              Kategori
-              <input id="categoryInput" name="category" list="categoryList" placeholder="Contoh: Gaji, Makan, Transport" required />
-              <datalist id="categoryList"></datalist>
-            </label>
-
-            <label>
-              Deskripsi
-              <input id="descriptionInput" name="description" type="text" placeholder="Keterangan transaksi" required />
-            </label>
-
-            <label>
-              Nominal
-              <input id="amountInput" name="amount" type="number" min="0" step="100" placeholder="0" required />
-            </label>
-
-            <button class="button primary" id="saveButton" type="submit">Simpan Transaksi</button>
-          </form>
+      <section class="panel category-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Kategori</p>
+            <h2>Ringkasan Pilihan</h2>
+          </div>
         </div>
 
-        <aside class="panel category-panel">
-          <div class="panel-heading">
+        <label class="category-filter">
+          Tampilkan kategori
+          <select id="categorySummarySelect">
+            <option value="all">Semua kategori</option>
+          </select>
+        </label>
+
+        <div class="category-stat-grid">
+          <div class="interactive-card">
+            <span>Pemasukan</span>
+            <strong id="categoryIncome">Rp0</strong>
+          </div>
+          <div class="interactive-card">
+            <span>Pengeluaran</span>
+            <strong id="categoryExpense">Rp0</strong>
+          </div>
+          <div class="interactive-card">
+            <span>Saldo</span>
+            <strong id="categoryBalance">Rp0</strong>
+          </div>
+          <div class="interactive-card">
+            <span>Transaksi</span>
+            <strong id="categoryCount">0</strong>
+          </div>
+        </div>
+
+        <div class="bar-list" id="categoryBars" aria-label="Rincian per kategori"></div>
+
+        <section class="trend-card" aria-label="Grafik pergerakan transaksi">
+          <div class="trend-heading">
             <div>
-              <p class="eyebrow">Kategori</p>
-              <h2>Ringkasan Pilihan</h2>
+              <p class="eyebrow">Pergerakan</p>
+              <h3>Tren Transaksi</h3>
+            </div>
+            <div class="segmented-control" id="trendModeButtons" aria-label="Pilih periode grafik">
+              <button class="is-active" type="button" data-trend-mode="monthly">MtM</button>
+              <button type="button" data-trend-mode="quarterly">QoQ</button>
+              <button type="button" data-trend-mode="yearly">YoY</button>
             </div>
           </div>
-
-          <label>
-            Tampilkan kategori
-            <select id="categorySummarySelect">
-              <option value="all">Semua kategori</option>
-            </select>
-          </label>
-
-          <div class="category-stat-grid">
-            <div class="interactive-card">
-              <span>Pemasukan</span>
-              <strong id="categoryIncome">Rp0</strong>
-            </div>
-            <div class="interactive-card">
-              <span>Pengeluaran</span>
-              <strong id="categoryExpense">Rp0</strong>
-            </div>
-            <div class="interactive-card">
-              <span>Saldo</span>
-              <strong id="categoryBalance">Rp0</strong>
-            </div>
-            <div class="interactive-card">
-              <span>Transaksi</span>
-              <strong id="categoryCount">0</strong>
-            </div>
-          </div>
-
-          <div class="bar-list" id="categoryBars" aria-label="Rincian per kategori"></div>
-
-          <section class="trend-card" aria-label="Grafik pergerakan transaksi">
-            <div class="trend-heading">
-              <div>
-                <p class="eyebrow">Pergerakan</p>
-                <h3>Tren Transaksi</h3>
-              </div>
-              <div class="segmented-control" id="trendModeButtons" aria-label="Pilih periode grafik">
-                <button class="is-active" type="button" data-trend-mode="monthly">MtM</button>
-                <button type="button" data-trend-mode="quarterly">QoQ</button>
-                <button type="button" data-trend-mode="yearly">YoY</button>
-              </div>
-            </div>
-            <div id="trendChart"></div>
-          </section>
-        </aside>
+          <div id="trendChart"></div>
+        </section>
       </section>
 
       <p class="status-banner hidden" id="importStatus"></p>
@@ -212,16 +165,16 @@
       </section>
     </main>
 
-    <button class="quick-entry-button hidden" id="quickEntryButton" type="button" aria-label="Catat dengan chat/voice command" title="Catat dengan chat/voice command">
-      Catat
+    <button class="quick-entry-button hidden" id="quickEntryButton" type="button" aria-label="Tambah transaksi" title="Tambah transaksi">
+      Tambah Transaksi
     </button>
 
     <section class="modal-backdrop hidden" id="quickEntryModal" aria-modal="true" role="dialog" aria-labelledby="quickEntryTitle">
       <div class="quick-entry-modal">
         <div class="modal-heading">
           <div>
-            <p class="eyebrow">Chat / voice</p>
-            <h2 id="quickEntryTitle">Catat Cepat</h2>
+            <p class="eyebrow">Tambah transaksi</p>
+            <h2 id="quickEntryTitle">Tambah Transaksi</h2>
           </div>
           <button class="icon-button" id="closeQuickEntryButton" type="button" aria-label="Tutup catat cepat">X</button>
         </div>
@@ -272,6 +225,53 @@
             <button class="button ghost" id="cancelDraftButton" type="button">Batal</button>
           </div>
         </form>
+
+        <section class="modal-section">
+          <div class="modal-subheading">
+            <p class="eyebrow">Input manual</p>
+            <h3 id="formTitle">Tambah Manual</h3>
+          </div>
+
+          <form class="transaction-form manual-entry-form" id="transactionForm">
+            <input type="hidden" id="transactionId" />
+
+            <div class="manual-grid">
+              <label>
+                Tanggal
+                <input id="dateInput" name="date" type="date" required />
+              </label>
+
+              <label>
+                Jenis
+                <select id="typeInput" name="type" required>
+                  <option value="income">Pemasukan</option>
+                  <option value="expense">Pengeluaran</option>
+                </select>
+              </label>
+
+              <label>
+                Kategori
+                <input id="categoryInput" name="category" list="categoryList" placeholder="Contoh: Gaji, Makan, Transport" required />
+                <datalist id="categoryList"></datalist>
+              </label>
+
+              <label>
+                Nominal
+                <input id="amountInput" name="amount" type="number" min="0" step="100" placeholder="0" required />
+              </label>
+
+              <label class="manual-description">
+                Deskripsi
+                <input id="descriptionInput" name="description" type="text" placeholder="Keterangan transaksi" required />
+              </label>
+            </div>
+
+            <div class="manual-actions">
+              <button class="button primary" id="saveButton" type="submit">Simpan Transaksi</button>
+              <button class="button ghost hidden" id="cancelEditButton" type="button">Batal Edit</button>
+            </div>
+          </form>
+        </section>
       </div>
     </section>
 

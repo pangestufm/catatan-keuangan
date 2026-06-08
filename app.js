@@ -504,6 +504,7 @@ function handleSubmit(event) {
   saveTransactions();
   resetForm();
   render();
+  closeQuickEntryModal();
 }
 
 async function importExcelFile(event) {
@@ -717,7 +718,6 @@ function editDraftManually() {
   elements.cancelEditButton.classList.remove("hidden");
   setChatStatus("Draft sudah dipindahkan ke form manual. Koreksi bagian yang perlu, lalu simpan.", "info");
   clearDraft(false);
-  closeQuickEntryModal();
   elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -905,7 +905,9 @@ function handleTableAction(event) {
   if (!transaction) return;
 
   if (button.dataset.action === "edit") {
+    openQuickEntryModal();
     fillForm(transaction);
+    setChatStatus("Transaksi dibuka di form manual. Koreksi bagian yang perlu, lalu simpan.", "info");
     return;
   }
 
@@ -936,7 +938,7 @@ function resetForm() {
   elements.form.reset();
   elements.transactionId.value = "";
   elements.dateInput.value = getTodayInputValue();
-  elements.formTitle.textContent = "Tambah Transaksi";
+  elements.formTitle.textContent = "Tambah Manual";
   elements.saveButton.textContent = "Simpan Transaksi";
   elements.cancelEditButton.classList.add("hidden");
 }
