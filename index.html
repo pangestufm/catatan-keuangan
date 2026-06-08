@@ -7,7 +7,29 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
+    <section class="login-screen" id="loginScreen">
+      <form class="login-card" id="loginForm">
+        <p class="eyebrow">Private workspace</p>
+        <h1>Masuk Catatan Keuangan</h1>
+        <p class="login-copy">Gunakan nama workspace dan token Netlify agar data kamu tersimpan di ruang database yang terpisah.</p>
+
+        <label>
+          Workspace
+          <input id="workspaceInput" type="text" autocomplete="username" placeholder="contoh: keluarga-ando" required />
+        </label>
+
+        <label>
+          Access token
+          <input id="accessTokenInput" type="password" autocomplete="current-password" placeholder="APP_ACCESS_TOKEN dari Netlify" required />
+        </label>
+
+        <button class="button primary" type="submit">Masuk Online</button>
+        <button class="button secondary" id="localModeButton" type="button">Pakai Mode Lokal</button>
+        <p class="status-text" id="loginStatus">Token tidak disimpan di server aplikasi, hanya di browser perangkat ini.</p>
+      </form>
+    </section>
+
+    <main class="app-shell hidden" id="appShell">
       <header class="topbar">
         <div>
           <p class="eyebrow">Aplikasi hybrid offline / online</p>
@@ -33,6 +55,9 @@
           </button>
           <button class="button theme-toggle" id="themeToggle" type="button" title="Ganti mode terang/gelap">
             Dark Mode
+          </button>
+          <button class="button secondary" id="logoutButton" type="button" title="Keluar dari workspace">
+            Keluar
           </button>
         </div>
       </header>

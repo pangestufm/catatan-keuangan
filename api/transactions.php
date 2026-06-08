@@ -4,7 +4,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-App-Token');
+header('Access-Control-Allow-Headers: Content-Type, X-App-Token, X-App-Workspace');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -30,13 +30,19 @@ if ($accessToken !== '') {
 try {
     $pdo = openDatabase();
     $method = $_SERVER['REQUEST_METHOD'];
+    $workspaceId = sanitizeWorkspace($_SERVER['HTTP_X_APP_WORKSPACE'] ?? '');
+
+    if ($workspaceId === '') {
+        respond(['error' => 'Workspace wajib diisi.'], 422);
+    }
+    $stateKey = 'transactions:' . $workspaceId;
 
     if ($method === 'GET') {
-        respond(readState($pdo));
+        respond(readState($pdo, $stateKey));
     }
 
     if ($method === 'DELETE') {
-        writeState($pdo, []);
+        writeState($pdo, $stateKey, []);
         respond(['transactions' => [], 'updatedAt' => gmdate(DATE_ATOM)]);
     }
 
@@ -47,7 +53,7 @@ try {
         }
 
         $transactions = sanitizeTransactions($payload['transactions']);
-        writeState($pdo, $transactions);
+        writeState($pdo, $stateKey, $transactions);
         respond(['transactions' => $transactions, 'updatedAt' => gmdate(DATE_ATOM)]);
     }
 
@@ -76,10 +82,10 @@ function openDatabase(): PDO
     return $pdo;
 }
 
-function readState(PDO $pdo): array
+function readState(PDO $pdo, string $stateKey): array
 {
     $statement = $pdo->prepare('SELECT state_value, updated_at FROM app_state WHERE state_key = :state_key');
-    $statement->execute(['state_key' => 'transactions']);
+    $statement->execute(['state_key' => $stateKey]);
     $row = $statement->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) {
@@ -93,14 +99,14 @@ function readState(PDO $pdo): array
     ];
 }
 
-function writeState(PDO $pdo, array $transactions): void
+function writeState(PDO $pdo, string $stateKey, array $transactions): void
 {
     $statement = $pdo->prepare(
         'INSERT OR REPLACE INTO app_state (state_key, state_value, updated_at)
          VALUES (:state_key, :state_value, :updated_at)'
     );
     $statement->execute([
-        'state_key' => 'transactions',
+        'state_key' => $stateKey,
         'state_value' => json_encode(array_values($transactions), JSON_UNESCAPED_UNICODE),
         'updated_at' => gmdate(DATE_ATOM),
     ]);
@@ -142,6 +148,14 @@ function sanitizeTransactions(array $transactions): array
 function cleanString($value): string
 {
     return trim((string) $value);
+}
+
+function sanitizeWorkspace($value): string
+{
+    $workspace = strtolower(cleanString($value));
+    $workspace = preg_replace('/[^a-z0-9_-]+/', '-', $workspace);
+    $workspace = trim((string) $workspace, '-');
+    return substr($workspace, 0, 48);
 }
 
 function respond(array $payload, int $status = 200): void

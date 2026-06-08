@@ -1,6 +1,6 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, X-App-Token",
+  "Access-Control-Allow-Headers": "Content-Type, X-App-Token, X-App-Workspace",
   "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
   "Content-Type": "application/json; charset=utf-8",
 };
@@ -20,13 +20,18 @@ exports.handler = async (event) => {
 
   try {
     const method = event.httpMethod;
+    const workspaceId = sanitizeWorkspace(event.headers["x-app-workspace"] || event.headers["X-App-Workspace"] || "");
+
+    if (!workspaceId) {
+      return respond(422, { error: "Workspace wajib diisi." });
+    }
 
     if (method === "GET") {
-      return respond(200, await readState());
+      return respond(200, await readState(workspaceId));
     }
 
     if (method === "DELETE") {
-      await writeState([]);
+      await writeState(workspaceId, []);
       return respond(200, { transactions: [], updatedAt: new Date().toISOString() });
     }
 
@@ -37,7 +42,7 @@ exports.handler = async (event) => {
       }
 
       const transactions = sanitizeTransactions(payload.transactions);
-      await writeState(transactions);
+      await writeState(workspaceId, transactions);
       return respond(200, { transactions, updatedAt: new Date().toISOString() });
     }
 
@@ -47,8 +52,9 @@ exports.handler = async (event) => {
   }
 };
 
-async function readState() {
-  const response = await supabaseFetch("/rest/v1/app_state?state_key=eq.transactions&select=state_value,updated_at");
+async function readState(workspaceId) {
+  const stateKey = createStateKey(workspaceId);
+  const response = await supabaseFetch(`/rest/v1/app_state?state_key=eq.${encodeURIComponent(stateKey)}&select=state_value,updated_at`);
   if (!response.ok) {
     throw new Error(`Supabase read failed: ${response.status}`);
   }
@@ -61,14 +67,15 @@ async function readState() {
   };
 }
 
-async function writeState(transactions) {
+async function writeState(workspaceId, transactions) {
+  const stateKey = createStateKey(workspaceId);
   const response = await supabaseFetch("/rest/v1/app_state?on_conflict=state_key", {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates",
     },
     body: JSON.stringify({
-      state_key: "transactions",
+      state_key: stateKey,
       state_value: transactions,
       updated_at: new Date().toISOString(),
     }),
@@ -119,6 +126,18 @@ function cryptoRandomId() {
 
 function cleanString(value) {
   return String(value ?? "").trim();
+}
+
+function sanitizeWorkspace(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function createStateKey(workspaceId) {
+  return `transactions:${workspaceId}`;
 }
 
 function respond(statusCode, payload) {

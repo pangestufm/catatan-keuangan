@@ -1,6 +1,8 @@
-const STORAGE_KEY = "catatan-keuangan-offline-v1";
+const LEGACY_STORAGE_KEY = "catatan-keuangan-offline-v1";
+const STORAGE_PREFIX = "catatan-keuangan-transactions";
 const THEME_KEY = "catatan-keuangan-theme";
 const API_TOKEN_KEY = "catatan-keuangan-api-token";
+const AUTH_KEY = "catatan-keuangan-auth";
 const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
 const DEFAULT_CATEGORIES = [
   "Gaji",
@@ -61,9 +63,12 @@ const CATEGORY_RULES = [
 ];
 
 const state = {
-  transactions: loadTransactions(),
+  transactions: [],
   storageMode: "local",
   activeApiUrl: "",
+  workspaceId: "",
+  accessToken: "",
+  isLocalOnly: false,
   isSyncing: false,
   syncTimer: null,
   filters: {
@@ -110,6 +115,14 @@ const elements = {
   voiceButton: document.querySelector("#voiceButton"),
   themeToggle: document.querySelector("#themeToggle"),
   storageStatus: document.querySelector("#storageStatus"),
+  appShell: document.querySelector("#appShell"),
+  loginScreen: document.querySelector("#loginScreen"),
+  loginForm: document.querySelector("#loginForm"),
+  workspaceInput: document.querySelector("#workspaceInput"),
+  accessTokenInput: document.querySelector("#accessTokenInput"),
+  loginStatus: document.querySelector("#loginStatus"),
+  localModeButton: document.querySelector("#localModeButton"),
+  logoutButton: document.querySelector("#logoutButton"),
 };
 
 const currencyFormatter = new Intl.NumberFormat("id-ID", {
@@ -130,8 +143,7 @@ function initialize() {
   applySavedTheme();
   elements.dateInput.value = getTodayInputValue();
   bindEvents();
-  render();
-  initializeOnlineStorage();
+  initializeSession();
 }
 
 function bindEvents() {
@@ -157,16 +169,115 @@ function bindEvents() {
   elements.chatForm.addEventListener("submit", handleChatSubmit);
   elements.voiceButton.addEventListener("click", startVoiceInput);
   elements.themeToggle.addEventListener("click", toggleTheme);
+  elements.loginForm.addEventListener("submit", handleLoginSubmit);
+  elements.localModeButton.addEventListener("click", enterLocalMode);
+  elements.logoutButton.addEventListener("click", logout);
   elements.transactionRows.addEventListener("click", handleTableAction);
+}
+
+function initializeSession() {
+  const savedSession = loadSession();
+  if (!savedSession) {
+    showLogin();
+    return;
+  }
+
+  state.workspaceId = savedSession.workspaceId;
+  state.accessToken = savedSession.accessToken;
+  state.isLocalOnly = savedSession.isLocalOnly;
+  startAppSession();
+}
+
+function handleLoginSubmit(event) {
+  event.preventDefault();
+  const workspaceId = sanitizeWorkspaceId(elements.workspaceInput.value);
+  const accessToken = elements.accessTokenInput.value.trim();
+
+  if (!workspaceId || !accessToken) {
+    setLoginStatus("Isi workspace dan access token dulu.", "error");
+    return;
+  }
+
+  state.workspaceId = workspaceId;
+  state.accessToken = accessToken;
+  state.isLocalOnly = false;
+  saveSession();
+  startAppSession();
+}
+
+function enterLocalMode() {
+  const workspaceId = sanitizeWorkspaceId(elements.workspaceInput.value) || "lokal";
+  state.workspaceId = workspaceId;
+  state.accessToken = "";
+  state.isLocalOnly = true;
+  saveSession();
+  startAppSession();
+}
+
+function startAppSession() {
+  elements.loginScreen.classList.add("hidden");
+  elements.appShell.classList.remove("hidden");
+  state.transactions = loadTransactions();
+  saveLocalTransactions();
+  resetForm();
+  render();
+
+  if (state.isLocalOnly) {
+    state.storageMode = "local";
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "Data tersimpan di browser perangkat ini.");
+    return;
+  }
+
+  initializeOnlineStorage();
+}
+
+function showLogin() {
+  elements.appShell.classList.add("hidden");
+  elements.loginScreen.classList.remove("hidden");
+  elements.workspaceInput.focus();
+}
+
+function logout() {
+  localStorage.removeItem(AUTH_KEY);
+  state.workspaceId = "";
+  state.accessToken = "";
+  state.isLocalOnly = false;
+  state.activeApiUrl = "";
+  state.transactions = [];
+  elements.accessTokenInput.value = "";
+  render();
+  showLogin();
+}
+
+function saveSession() {
+  localStorage.setItem(AUTH_KEY, JSON.stringify({
+    workspaceId: state.workspaceId,
+    accessToken: state.accessToken,
+    isLocalOnly: state.isLocalOnly,
+  }));
+}
+
+function loadSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+    if (!session || !session.workspaceId) return null;
+    return {
+      workspaceId: sanitizeWorkspaceId(session.workspaceId),
+      accessToken: String(session.accessToken || ""),
+      isLocalOnly: Boolean(session.isLocalOnly),
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function initializeOnlineStorage() {
   if (window.location.protocol === "file:") {
-    updateStorageStatus("Mode Lokal", "Data tersimpan di browser komputer ini.");
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "Data tersimpan di browser komputer ini.");
     return;
   }
 
-  updateStorageStatus("Mengecek Online", "Mencari API penyimpanan online...");
+  updateStorageStatus("Mengecek Online", `Mencari API penyimpanan online untuk workspace ${state.workspaceId}...`);
 
   try {
     const remoteState = await fetchRemoteTransactions();
@@ -178,13 +289,13 @@ async function initializeOnlineStorage() {
     saveLocalTransactions();
     render();
 
-    updateStorageStatus("Mode Online", "Data tersimpan di server dan tetap dicadangkan lokal.");
+    updateStorageStatus(`Mode Online · ${state.workspaceId}`, "Data tersimpan di server dan tetap dicadangkan lokal.");
     if (shouldPushMergedData) {
       await persistRemoteTransactions();
     }
   } catch (error) {
     state.storageMode = "local";
-    updateStorageStatus("Mode Lokal", "API online belum aktif, data disimpan di browser ini.");
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "API online belum aktif, data disimpan di browser ini.");
     console.info("Online storage tidak aktif:", error);
   }
 }
@@ -197,17 +308,17 @@ async function persistRemoteTransactions() {
   if (state.storageMode !== "online") return;
 
   state.isSyncing = true;
-  updateStorageStatus("Sinkronisasi", "Menyimpan perubahan ke server...");
+  updateStorageStatus("Sinkronisasi", `Menyimpan perubahan workspace ${state.workspaceId} ke server...`);
 
   try {
     const response = await apiRequest("PUT", { transactions: state.transactions });
     state.transactions = mergeTransactions(response.transactions, []);
     saveLocalTransactions();
     render();
-    updateStorageStatus("Mode Online", "Perubahan tersimpan di server.");
+    updateStorageStatus(`Mode Online · ${state.workspaceId}`, "Perubahan tersimpan di server.");
   } catch (error) {
     state.storageMode = "local";
-    updateStorageStatus("Mode Lokal", "Gagal sync ke server, perubahan tetap tersimpan lokal.");
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "Gagal sync ke server, perubahan tetap tersimpan lokal.");
     console.error("Sync online gagal:", error);
   } finally {
     state.isSyncing = false;
@@ -268,8 +379,9 @@ async function requestApiUrl(apiUrl, method, payload) {
 
 function createApiHeaders(payload) {
   const headers = {};
-  const token = localStorage.getItem(API_TOKEN_KEY);
+  const token = state.accessToken || localStorage.getItem(API_TOKEN_KEY);
   if (token) headers["X-App-Token"] = token;
+  if (state.workspaceId) headers["X-App-Workspace"] = state.workspaceId;
   if (payload) headers["Content-Type"] = "application/json";
   return headers;
 }
@@ -757,32 +869,48 @@ function renderCategoryBars(selectedCategory) {
     .map(([category, totals]) => ({
       category,
       ...totals,
-      activity: totals.income + totals.expense,
+      activity: totals.expense || totals.income,
     }))
     .sort((a, b) => b.activity - a.activity);
-
-  const maxActivity = Math.max(...rows.map((row) => row.activity), 1);
 
   if (!rows.length) {
     elements.categoryBars.innerHTML = `<p class="empty-state">Belum ada data kategori.</p>`;
     return;
   }
 
-  elements.categoryBars.innerHTML = rows.map((row) => {
-    const width = Math.max(6, Math.round((row.activity / maxActivity) * 100));
-    const dominantType = row.expense > row.income ? "expense" : "income";
-    return `
-      <div class="bar-item">
-        <div class="bar-label">
-          <span>${escapeHtml(row.category)}</span>
-          <span>${formatCurrency(row.activity)}</span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill ${dominantType}" style="width: ${width}%"></div>
+  const chartRows = rows.slice(0, 7);
+  const total = chartRows.reduce((sum, row) => sum + row.activity, 0) || 1;
+  const palette = ["#1f6f78", "#177245", "#b7443c", "#2864a6", "#9a6415", "#6f5cc2", "#2e8a99"];
+  let cursor = 0;
+  const segments = chartRows.map((row, index) => {
+    const start = cursor;
+    const portion = (row.activity / total) * 100;
+    cursor += portion;
+    return `${palette[index % palette.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  }).join(", ");
+
+  elements.categoryBars.innerHTML = `
+    <div class="category-chart">
+      <div class="donut-chart" style="background: conic-gradient(${segments});">
+        <div>
+          <span>${selectedCategory === "all" ? "Aktivitas" : "Kategori"}</span>
+          <strong>${formatCurrency(total)}</strong>
         </div>
       </div>
-    `;
-  }).join("");
+      <div class="chart-legend">
+        ${chartRows.map((row, index) => {
+          const percent = Math.round((row.activity / total) * 100);
+          return `
+            <div class="legend-row">
+              <span class="legend-dot" style="background:${palette[index % palette.length]}"></span>
+              <span class="legend-name">${escapeHtml(row.category)}</span>
+              <strong>${percent}%</strong>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderTable() {
@@ -1064,8 +1192,13 @@ function clearAllData() {
 
 function loadTransactions() {
   try {
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(data) ? data : [];
+    const workspaceData = JSON.parse(localStorage.getItem(getWorkspaceStorageKey()) || "[]");
+    const legacyData = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "[]");
+    const transactions = Array.isArray(workspaceData) ? workspaceData : [];
+    if (!transactions.length && Array.isArray(legacyData) && legacyData.length) {
+      return mergeTransactions(legacyData, []);
+    }
+    return transactions;
   } catch {
     return [];
   }
@@ -1077,7 +1210,11 @@ function saveTransactions() {
 }
 
 function saveLocalTransactions() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.transactions));
+  localStorage.setItem(getWorkspaceStorageKey(), JSON.stringify(state.transactions));
+}
+
+function getWorkspaceStorageKey() {
+  return `${STORAGE_PREFIX}-${state.workspaceId || "lokal"}`;
 }
 
 function downloadFile(filename, content, mimeType) {
@@ -1149,10 +1286,23 @@ function setChatStatus(message, type = "info") {
   elements.chatStatus.dataset.type = type;
 }
 
+function setLoginStatus(message, type = "info") {
+  elements.loginStatus.textContent = message;
+  elements.loginStatus.dataset.type = type;
+}
+
 function updateStorageStatus(label, title) {
   elements.storageStatus.textContent = label;
   elements.storageStatus.title = title || label;
   elements.storageStatus.dataset.mode = state.storageMode;
+}
+
+function sanitizeWorkspaceId(value) {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }
 
 function applySavedTheme() {

@@ -67,7 +67,16 @@ APP_ACCESS_TOKEN=buat_token_rahasia_sendiri
 
 5. Deploy ulang site di Netlify.
 
-### 4. Cek apakah online aktif
+### 4. Login ke aplikasi
+
+Saat membuka web, aplikasi meminta:
+
+- `Workspace`: nama ruang data, contoh `keluarga-ando`.
+- `Access token`: isi dari `APP_ACCESS_TOKEN` di Netlify.
+
+Data akan disimpan di Supabase dengan key `transactions:<workspace>`. Jadi jika repo di-fork, di-clone, atau ada beberapa workspace, catatan tidak saling bentrok selama workspace atau environment Netlify-nya berbeda.
+
+### 5. Cek apakah online aktif
 
 Saat dibuka dari URL Netlify, indikator di header akan berubah menjadi `Mode Online`.
 Jika masih `Mode Lokal`, cek:
