@@ -5,7 +5,8 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -24,10 +25,6 @@ exports.handler = async (event) => {
     }
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return respond(503, { error: "OPENAI_API_KEY belum diisi di Netlify environment variables." });
-  }
-
   try {
     const payload = JSON.parse(event.body || "{}");
     const text = cleanString(payload.text);
@@ -35,22 +32,38 @@ exports.handler = async (event) => {
       return respond(422, { error: "Teks transaksi wajib diisi." });
     }
 
-    const result = await callOpenAI({
+    const context = {
       text,
       today: cleanString(payload.today) || new Date().toISOString().slice(0, 10),
       timezone: cleanString(payload.timezone) || "Asia/Jakarta",
       categories: sanitizeList(payload.categories).slice(0, 80),
       categoryMemory: sanitizeCategoryMemory(payload.categoryMemory).slice(0, 40),
       recentTransactions: sanitizeRecentTransactions(payload.recentTransactions).slice(0, 35),
-    });
+    };
 
-    return respond(200, { transaction: sanitizeParsedTransaction(result) });
+    const provider = getProvider();
+    const result = provider === "gemini"
+      ? await callGemini(context)
+      : await callOpenAI(context);
+
+    return respond(200, { provider, transaction: sanitizeParsedTransaction(result) });
   } catch (error) {
     return respond(500, { error: "Parser agent gagal.", message: error.message });
   }
 };
 
+function getProvider() {
+  const configuredProvider = cleanString(process.env.AI_PROVIDER).toLowerCase();
+  if (configuredProvider === "gemini" || configuredProvider === "openai") return configuredProvider;
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  return "openai";
+}
+
 async function callOpenAI(context) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY belum diisi di Netlify environment variables.");
+  }
+
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -58,7 +71,7 @@ async function callOpenAI(context) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
+      model: process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL,
       store: false,
       instructions: buildInstructions(context),
       input: JSON.stringify({
@@ -74,20 +87,7 @@ async function callOpenAI(context) {
           type: "json_schema",
           name: "transaction_parser_result",
           strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["type", "date", "category", "description", "amount", "confidence", "reason"],
-            properties: {
-              type: { type: "string", enum: ["income", "expense"] },
-              date: { type: "string", description: "Tanggal format YYYY-MM-DD." },
-              category: { type: "string" },
-              description: { type: "string" },
-              amount: { type: "number" },
-              confidence: { type: "number" },
-              reason: { type: "string" },
-            },
-          },
+          schema: getTransactionSchema(true),
         },
       },
     }),
@@ -104,6 +104,113 @@ async function callOpenAI(context) {
   }
 
   return JSON.parse(outputText);
+}
+
+async function callGemini(context) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY belum diisi di Netlify environment variables.");
+  }
+
+  const model = normalizeGeminiModelName(process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
+  const body = buildGeminiRequestBody(context, false);
+  let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": process.env.GEMINI_API_KEY,
+    },
+    body: JSON.stringify(body),
+  });
+
+  let responseBody = await response.json().catch(() => ({}));
+
+  if (!response.ok && response.status === 400) {
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": process.env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify(buildGeminiRequestBody(context, true)),
+    });
+    responseBody = await response.json().catch(() => ({}));
+  }
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error?.message || `Gemini API error ${response.status}`);
+  }
+
+  const outputText = extractGeminiText(responseBody);
+  if (!outputText) {
+    throw new Error("Respons Gemini tidak berisi teks JSON.");
+  }
+
+  return JSON.parse(outputText);
+}
+
+function normalizeGeminiModelName(value) {
+  const model = cleanString(value) || DEFAULT_GEMINI_MODEL;
+  return model.startsWith("models/") ? model : `models/${model}`;
+}
+
+function buildGeminiRequestBody(context, legacySchema) {
+  const schema = getTransactionSchema(false);
+  const prompt = [
+    buildInstructions(context),
+    "",
+    "Input JSON:",
+    JSON.stringify({
+      text: context.text,
+      today: context.today,
+      timezone: context.timezone,
+      available_categories: context.categories,
+      learned_category_memory: context.categoryMemory,
+      recent_transactions: context.recentTransactions,
+    }),
+  ].join("\n");
+
+  const generationConfig = legacySchema
+    ? {
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      temperature: 0.1,
+    }
+    : {
+      responseFormat: {
+        text: {
+          mimeType: "application/json",
+          schema,
+        },
+      },
+      temperature: 0.1,
+    };
+
+  return {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig,
+  };
+}
+
+function getTransactionSchema(openAiStrict) {
+  return {
+    type: "object",
+    ...(openAiStrict ? { additionalProperties: false } : {}),
+    required: ["type", "date", "category", "description", "amount", "confidence", "reason"],
+    properties: {
+      type: { type: "string", enum: ["income", "expense"] },
+      date: { type: "string", description: "Tanggal format YYYY-MM-DD." },
+      category: { type: "string" },
+      description: { type: "string" },
+      amount: { type: "number" },
+      confidence: { type: "number" },
+      reason: { type: "string" },
+    },
+  };
 }
 
 function buildInstructions(context) {
@@ -133,6 +240,16 @@ function extractOutputText(body) {
   (body.output || []).forEach((item) => {
     (item.content || []).forEach((content) => {
       if (typeof content.text === "string") parts.push(content.text);
+    });
+  });
+  return parts.join("\n").trim();
+}
+
+function extractGeminiText(body) {
+  const parts = [];
+  (body.candidates || []).forEach((candidate) => {
+    (candidate.content?.parts || []).forEach((part) => {
+      if (typeof part.text === "string") parts.push(part.text);
     });
   });
   return parts.join("\n").trim();

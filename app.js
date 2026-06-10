@@ -643,7 +643,7 @@ async function handleChatSubmit(event) {
 
   showDraft(parsed);
   elements.chatInput.value = "";
-  setChatStatus(`Draft dibuat dari ${parsed.source === "ChatGPT Agent" ? "agent ChatGPT" : "parser lokal"}. Cek dulu, lalu simpan atau ubah manual.`, "info");
+  setChatStatus(`Draft dibuat dari ${getDraftSourceLabel(parsed.source)}. Cek dulu, lalu simpan atau ubah manual.`, "info");
 }
 
 function startVoiceInput() {
@@ -789,7 +789,7 @@ async function requestAgentTransaction(text) {
       if (!response.ok) continue;
 
       const data = await response.json();
-      const draft = normalizeAgentDraft(data?.transaction, text);
+      const draft = normalizeAgentDraft(data?.transaction, text, data?.provider);
       if (draft) return draft;
     } catch {
       // Parser lokal tetap dipakai saat function belum tersedia atau request agent gagal.
@@ -801,7 +801,7 @@ async function requestAgentTransaction(text) {
   return null;
 }
 
-function normalizeAgentDraft(draft, fallbackText) {
+function normalizeAgentDraft(draft, fallbackText, provider = "") {
   if (!draft || typeof draft !== "object") return null;
 
   const amount = parseAmount(draft.amount);
@@ -821,8 +821,14 @@ function normalizeAgentDraft(draft, fallbackText) {
     category: findClosestCategory(category),
     description: toTitleCase(description),
     amount,
-    source: "ChatGPT Agent",
+    source: provider === "gemini" ? "Gemini Agent" : "ChatGPT Agent",
   };
+}
+
+function getDraftSourceLabel(source) {
+  if (source === "Gemini Agent") return "agent Gemini";
+  if (source === "ChatGPT Agent") return "agent ChatGPT";
+  return "parser lokal";
 }
 
 function summarizeCategoryMemory() {
