@@ -5,6 +5,7 @@ const API_TOKEN_KEY = "catatan-keuangan-api-token";
 const AUTH_KEY = "catatan-keuangan-auth";
 const LEARNING_PREFIX = "catatan-keuangan-learning";
 const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
+const PARSE_API_URLS = ["/.netlify/functions/parse-transaction"];
 const DEFAULT_CATEGORIES = [
   "Gaji",
   "Bonus",
@@ -624,7 +625,7 @@ function parseWorkbookTransactions(workbook) {
   return transactions;
 }
 
-function handleChatSubmit(event) {
+async function handleChatSubmit(event) {
   event.preventDefault();
   const text = elements.chatInput.value.trim();
   if (!text) {
@@ -632,7 +633,9 @@ function handleChatSubmit(event) {
     return;
   }
 
-  const parsed = parseChatTransaction(text);
+  setChatStatus("Agent sedang membaca konteks transaksi...", "info");
+
+  const parsed = await parseChatTransactionSmart(text);
   if (!parsed) {
     setChatStatus("Aku belum bisa menemukan nominalnya. Coba tulis seperti: belanja makanan 10000.", "error");
     return;
@@ -640,7 +643,7 @@ function handleChatSubmit(event) {
 
   showDraft(parsed);
   elements.chatInput.value = "";
-  setChatStatus("Aku sudah membuat draft catatan. Cek dulu, lalu simpan atau ubah manual.", "info");
+  setChatStatus(`Draft dibuat dari ${parsed.source === "ChatGPT Agent" ? "agent ChatGPT" : "parser lokal"}. Cek dulu, lalu simpan atau ubah manual.`, "info");
 }
 
 function startVoiceInput() {
@@ -744,6 +747,95 @@ function clearDraft(resetStatus = true) {
   if (resetStatus) {
     setChatStatus("Aplikasi akan menebak tanggal, jenis, kategori, deskripsi, dan nominal dari kalimatmu.", "info");
   }
+}
+
+async function parseChatTransactionSmart(text) {
+  const agentDraft = await requestAgentTransaction(text);
+  if (agentDraft) return agentDraft;
+  return parseChatTransaction(text);
+}
+
+async function requestAgentTransaction(text) {
+  if (window.location.protocol === "file:") return null;
+
+  const payload = {
+    text,
+    today: getTodayInputValue(),
+    locale: "id-ID",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Jakarta",
+    categories: getCategories(),
+    categoryMemory: summarizeCategoryMemory(),
+    recentTransactions: state.transactions.slice(0, 35).map((item) => ({
+      date: item.date,
+      type: item.type,
+      category: item.category,
+      description: item.description,
+      amount: item.amount,
+    })),
+  };
+
+  for (const apiUrl of PARSE_API_URLS) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8500);
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: createApiHeaders(payload),
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const draft = normalizeAgentDraft(data?.transaction, text);
+      if (draft) return draft;
+    } catch {
+      // Parser lokal tetap dipakai saat function belum tersedia atau request agent gagal.
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  return null;
+}
+
+function normalizeAgentDraft(draft, fallbackText) {
+  if (!draft || typeof draft !== "object") return null;
+
+  const amount = parseAmount(draft.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const type = draft.type === "income" ? "income" : "expense";
+  const fallback = parseChatTransaction(fallbackText);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(draft.date || ""))
+    ? String(draft.date)
+    : (fallback?.date || getTodayInputValue());
+  const category = cleanText(draft.category) || fallback?.category || inferCategory(fallbackText, type);
+  const description = cleanText(draft.description) || fallback?.description || fallbackText;
+
+  return {
+    type,
+    date,
+    category: findClosestCategory(category),
+    description: toTitleCase(description),
+    amount,
+    source: "ChatGPT Agent",
+  };
+}
+
+function summarizeCategoryMemory() {
+  const memory = loadCategoryMemory();
+  return Object.entries(memory)
+    .map(([keyword, scores]) => {
+      const bestCategory = Object.entries(scores || {}).sort((a, b) => b[1] - a[1])[0];
+      if (!bestCategory) return null;
+      return { keyword, category: bestCategory[0], count: bestCategory[1] };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 40);
 }
 
 function parseChatTransaction(text) {
@@ -1233,11 +1325,11 @@ function renderTable() {
     ${group.items.map((item) => `
       <tr class="transaction-row">
         <td></td>
-        <td><span class="type-pill ${item.type}">${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
-        <td>${escapeHtml(item.category)}</td>
-        <td>${escapeHtml(item.description)}</td>
-        <td class="numeric">${formatCurrency(item.amount)}</td>
-        <td>
+        <td data-label="Jenis"><span class="type-pill ${item.type}">${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
+        <td data-label="Kategori">${escapeHtml(item.category)}</td>
+        <td data-label="Deskripsi">${escapeHtml(item.description)}</td>
+        <td class="numeric" data-label="Nominal">${formatCurrency(item.amount)}</td>
+        <td data-label="Aksi">
           <div class="row-actions">
             <button class="icon-button" type="button" title="Edit transaksi" data-action="edit" data-id="${item.id}">Edit</button>
             <button class="icon-button delete" type="button" title="Hapus transaksi" data-action="delete" data-id="${item.id}">Del</button>

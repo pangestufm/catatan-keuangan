@@ -1331,6 +1331,103 @@ tbody tr:last-child td {
     box-shadow: 0 24px 70px rgba(3, 10, 14, 0.34);
   }
 
+  body.detail-open .table-heading {
+    align-items: stretch;
+  }
+
+  body.detail-open .table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.detail-open table,
+  body.detail-open tbody {
+    min-width: 0;
+    width: 100%;
+    display: block;
+    background: transparent;
+  }
+
+  body.detail-open thead {
+    display: none;
+  }
+
+  body.detail-open tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  body.detail-open tr,
+  body.detail-open td {
+    width: auto !important;
+  }
+
+  body.detail-open .date-group-row,
+  body.detail-open .transaction-row {
+    display: block;
+  }
+
+  body.detail-open .date-group-row td {
+    display: block;
+    border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
+    border-radius: 8px;
+  }
+
+  body.detail-open .transaction-row {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--surface-muted) 70%, transparent), var(--surface));
+    padding: 12px 14px;
+  }
+
+  body.detail-open .transaction-row:hover {
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
+  }
+
+  body.detail-open .transaction-row td {
+    min-height: 0;
+    height: auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    padding: 9px 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  body.detail-open .transaction-row td:first-child {
+    display: none;
+  }
+
+  body.detail-open .transaction-row td:last-child {
+    border-bottom: 0;
+    align-items: center;
+  }
+
+  body.detail-open .transaction-row td::before {
+    content: attr(data-label);
+    flex: 0 0 86px;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  body.detail-open .transaction-row td:first-child::before {
+    content: "";
+  }
+
+  body.detail-open .transaction-row .row-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
   .detail-close-button {
     display: inline-flex;
     flex: 0 0 auto;

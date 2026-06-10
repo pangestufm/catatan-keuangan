@@ -63,9 +63,13 @@ Pilihan upload manual:
 SUPABASE_URL=isi_dengan_project_url_supabase
 SUPABASE_SERVICE_ROLE_KEY=isi_dengan_service_role_key
 APP_ACCESS_TOKEN=buat_token_rahasia_sendiri
+OPENAI_API_KEY=isi_dengan_api_key_openai
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 5. Deploy ulang site di Netlify.
+
+`OPENAI_API_KEY` dipakai oleh Netlify Function `parse-transaction` untuk fitur agent ChatGPT pada catat cepat. `OPENAI_MODEL` opsional; jika dikosongkan aplikasi memakai `gpt-4o-mini`. Untuk akurasi lebih tinggi, kamu bisa menggantinya dengan model OpenAI lain yang tersedia di akunmu.
 
 ### 4. Login ke aplikasi
 
@@ -96,6 +100,7 @@ Jika masih `Mode Lokal`, cek:
   - Pemasukan: kolom A uraian, kolom B tanggal, kolom C nominal.
   - Pengeluaran: kolom E uraian, kolom F tanggal, kolom G kategori, kolom H nominal.
 - Catat cepat dari chat, contoh: `belanja pizza tanggal 4 200000`.
+- Agent ChatGPT untuk membaca konteks chat/voice dengan Structured Outputs. Jika `OPENAI_API_KEY` belum diisi, aplikasi otomatis fallback ke parser lokal.
 - Voice input untuk catat cepat di browser yang mendukung Speech Recognition.
 - Draft konfirmasi sebelum transaksi dari chat/voice disimpan.
 - Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.
