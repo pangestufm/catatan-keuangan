@@ -252,6 +252,7 @@
               <input id="filterDate" type="date" />
             </label>
             <button class="button secondary" id="clearDateFilterButton" type="button">Semua Tanggal</button>
+            <button class="icon-button detail-close-button" id="closeDetailButton" type="button" aria-label="Tutup detail transaksi">X</button>
           </div>
         </div>
 
@@ -282,6 +283,10 @@
         <path d="M5 12h14" />
       </svg>
       Tambah Transaksi
+    </button>
+
+    <button class="detail-toggle-button hidden" id="detailToggleButton" type="button" aria-label="Buka detail transaksi" title="Buka detail transaksi">
+      Detail Transaksi
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>

@@ -125,8 +125,10 @@ const elements = {
   editDraftButton: document.querySelector("#editDraftButton"),
   cancelDraftButton: document.querySelector("#cancelDraftButton"),
   quickEntryButton: document.querySelector("#quickEntryButton"),
+  detailToggleButton: document.querySelector("#detailToggleButton"),
   quickEntryModal: document.querySelector("#quickEntryModal"),
   closeQuickEntryButton: document.querySelector("#closeQuickEntryButton"),
+  closeDetailButton: document.querySelector("#closeDetailButton"),
   themeToggle: document.querySelector("#themeToggle"),
   storageStatus: document.querySelector("#storageStatus"),
   appShell: document.querySelector("#appShell"),
@@ -188,7 +190,9 @@ function bindEvents() {
   elements.editDraftButton.addEventListener("click", editDraftManually);
   elements.cancelDraftButton.addEventListener("click", clearDraft);
   elements.quickEntryButton.addEventListener("click", openQuickEntryModal);
+  elements.detailToggleButton.addEventListener("click", openDetailTransactions);
   elements.closeQuickEntryButton.addEventListener("click", closeQuickEntryModal);
+  elements.closeDetailButton.addEventListener("click", closeDetailTransactions);
   elements.quickEntryModal.addEventListener("click", closeQuickEntryFromBackdrop);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.loginForm.addEventListener("submit", handleLoginSubmit);
@@ -241,6 +245,7 @@ function startAppSession() {
   elements.loginScreen.classList.add("hidden");
   elements.appShell.classList.remove("hidden");
   elements.quickEntryButton.classList.remove("hidden");
+  elements.detailToggleButton.classList.remove("hidden");
   state.transactions = loadTransactions();
   saveLocalTransactions();
   resetForm();
@@ -259,6 +264,8 @@ function showLogin() {
   document.body.dataset.session = "login";
   elements.appShell.classList.add("hidden");
   elements.quickEntryButton.classList.add("hidden");
+  elements.detailToggleButton.classList.add("hidden");
+  closeDetailTransactions();
   closeQuickEntryModal();
   elements.loginScreen.classList.remove("hidden");
   elements.workspaceInput.focus();
@@ -289,6 +296,14 @@ function closeQuickEntryFromBackdrop(event) {
   if (event.target === elements.quickEntryModal) {
     closeQuickEntryModal();
   }
+}
+
+function openDetailTransactions() {
+  document.body.classList.add("detail-open");
+}
+
+function closeDetailTransactions() {
+  document.body.classList.remove("detail-open");
 }
 
 function saveSession() {
@@ -1019,56 +1034,27 @@ function renderCategoryBars(selectedCategory) {
     return;
   }
 
-  const chartRows = buildChartRows(rows);
-  const total = chartRows.reduce((sum, row) => sum + row.activity, 0) || 1;
-  const palette = ["#1f6f78", "#177245", "#b7443c", "#2864a6", "#9a6415", "#6f5cc2", "#2e8a99"];
-  const circumference = 2 * Math.PI * 42;
-  let offset = 0;
+  const categoryRows = buildCategorySummaryRows(rows);
+  const total = categoryRows.reduce((sum, row) => sum + row.activity, 0) || 1;
 
   elements.categoryBars.innerHTML = `
-    <div class="category-chart">
-      <div class="donut-wrap" data-tooltip="${escapeHtml(`${selectedCategory === "all" ? "Total aktivitas" : selectedCategory}: ${formatCurrency(total)}`)}">
-        <svg class="donut-chart" viewBox="0 0 120 120" role="img" aria-label="Ringkasan kategori">
-          <circle class="donut-track" cx="60" cy="60" r="42"></circle>
-          ${chartRows.map((row, index) => {
-            const length = (row.activity / total) * circumference;
-            const currentOffset = offset;
-            offset += length;
-            return `
-              <circle
-                class="donut-segment"
-                cx="60"
-                cy="60"
-                r="42"
-                pathLength="${circumference}"
-                stroke="${palette[index % palette.length]}"
-                stroke-dasharray="${length.toFixed(2)} ${(circumference - length).toFixed(2)}"
-                stroke-dashoffset="${(-currentOffset).toFixed(2)}"
-                data-category="${escapeHtml(row.category)}"
-                data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}"
-              >
-                <title>${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}</title>
-              </circle>
-            `;
-          }).join("")}
-        </svg>
-        <div class="donut-center">
-          <span>${selectedCategory === "all" ? "Aktivitas" : "Kategori"}</span>
-          <strong title="${escapeHtml(formatCurrency(total))}">${formatCompactCurrency(total)}</strong>
-        </div>
-      </div>
-      <div class="chart-legend">
-        ${chartRows.map((row, index) => {
-          const percent = Math.round((row.activity / total) * 100);
-          return `
-            <div class="legend-row interactive-row" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
-              <span class="legend-dot" style="background:${palette[index % palette.length]}"></span>
-              <span class="legend-name">${escapeHtml(row.category)}</span>
-              <strong>${percent}%</strong>
-            </div>
-          `;
-        }).join("")}
-      </div>
+    <div class="category-number-list">
+      ${categoryRows.map((row) => {
+        const percent = Math.round((row.activity / total) * 100);
+        return `
+          <button class="category-number-row interactive-row" type="button" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
+            <span class="category-name">${escapeHtml(row.category)}</span>
+            <span class="category-values">
+              <strong>${formatCurrency(row.activity)}</strong>
+              <small>${percent}% aktivitas</small>
+            </span>
+            <span class="category-breakdown">
+              <span>Masuk ${formatCompactCurrency(row.income)}</span>
+              <span>Keluar ${formatCompactCurrency(row.expense)}</span>
+            </span>
+          </button>
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -1084,7 +1070,7 @@ function handleCategoryChartClick(event) {
   renderCategorySummary();
 }
 
-function buildChartRows(rows) {
+function buildCategorySummaryRows(rows) {
   if (rows.length <= 7) return rows;
 
   const visibleRows = rows.slice(0, 6);
