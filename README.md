@@ -97,7 +97,9 @@ Jika masih `Mode Lokal`, cek:
 
 - Tambah, edit, dan hapus transaksi.
 - Summary total pemasukan, pengeluaran, dan saldo bersih.
-- Tabel detail transaksi dengan pencarian, filter jenis, dan filter bulan.
+- Filter bulan aktif untuk summary card, ringkasan kategori, tren, dan detail transaksi.
+- Tabel detail transaksi per tanggal dengan filter tanggal di dalam bulan aktif.
+- Grafik pengeluaran day-to-day untuk satu bulan.
 - Ringkasan per kategori melalui pilihan kategori di card.
 - Import `.xlsx` / `.xls` dari format Excel lama:
   - Pemasukan: kolom A uraian, kolom B tanggal, kolom C nominal.
@@ -109,8 +111,8 @@ Jika masih `Mode Lokal`, cek:
 - Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.
 - Pembelajaran kategori lokal per workspace dari transaksi yang dikonfirmasi atau dikoreksi.
 - Dark mode.
-- Export `.csv` untuk import ke Google Sheets.
-- Export `.xls` untuk dibuka di Microsoft Excel.
+- Export `.csv` untuk import ke Google Sheets sekaligus backup yang bisa diimport ulang ke aplikasi.
+- Export `.xls` untuk dibuka di Microsoft Excel sekaligus backup yang bisa diimport ulang ke aplikasi.
 
 ## Catatan penyimpanan
 

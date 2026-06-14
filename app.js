@@ -76,6 +76,7 @@ const state = {
   syncTimer: null,
   trendMode: "monthly",
   filters: {
+    month: "",
     date: "",
   },
 };
@@ -103,6 +104,10 @@ const elements = {
   categoryBars: document.querySelector("#categoryBars"),
   trendModeButtons: document.querySelector("#trendModeButtons"),
   trendChart: document.querySelector("#trendChart"),
+  dailyExpenseChart: document.querySelector("#dailyExpenseChart"),
+  dailyExpenseMonthLabel: document.querySelector("#dailyExpenseMonthLabel"),
+  monthFilterInput: document.querySelector("#monthFilterInput"),
+  showAllMonthsButton: document.querySelector("#showAllMonthsButton"),
   filterDate: document.querySelector("#filterDate"),
   clearDateFilterButton: document.querySelector("#clearDateFilterButton"),
   transactionRows: document.querySelector("#transactionRows"),
@@ -166,6 +171,8 @@ initialize();
 function initialize() {
   applySavedTheme();
   elements.dateInput.value = getTodayInputValue();
+  state.filters.month = getCurrentMonthInputValue();
+  elements.monthFilterInput.value = state.filters.month;
   bindEvents();
   initializeSession();
 }
@@ -173,9 +180,15 @@ function initialize() {
 function bindEvents() {
   elements.form.addEventListener("submit", handleSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
+  elements.monthFilterInput.addEventListener("change", handleMonthFilterChange);
+  elements.showAllMonthsButton.addEventListener("click", showAllMonths);
   elements.filterDate.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
-    renderTable();
+    if (state.filters.date) {
+      state.filters.month = state.filters.date.slice(0, 7);
+      elements.monthFilterInput.value = state.filters.month;
+    }
+    render();
   });
   elements.clearDateFilterButton.addEventListener("click", clearDateFilter);
   elements.categorySummarySelect.addEventListener("change", renderCategorySummary);
@@ -530,7 +543,7 @@ async function importExcelFile(event) {
   if (!file) return;
 
   if (!window.XLSX) {
-    showImportStatus("Parser Excel belum termuat. Pastikan file vendor/xlsx.full.min.js ada.", "error");
+    showImportStatus("Parser Excel/CSV belum termuat. Pastikan file vendor/xlsx.full.min.js ada.", "error");
     event.target.value = "";
     return;
   }
@@ -542,7 +555,7 @@ async function importExcelFile(event) {
     const importedTransactions = parseWorkbookTransactions(workbook);
 
     if (!importedTransactions.length) {
-      showImportStatus("Tidak ada transaksi yang ditemukan. Pastikan format kolom sesuai contoh Excel.", "error");
+      showImportStatus("Tidak ada transaksi yang ditemukan. Pastikan format kolom sesuai contoh Excel atau file backup aplikasi.", "error");
       return;
     }
 
@@ -555,7 +568,7 @@ async function importExcelFile(event) {
     });
 
     if (!newTransactions.length) {
-      showImportStatus(`Semua ${importedTransactions.length} transaksi dari Excel sudah ada di aplikasi.`, "info");
+      showImportStatus(`Semua ${importedTransactions.length} transaksi dari file sudah ada di aplikasi.`, "info");
       return;
     }
 
@@ -570,7 +583,7 @@ async function importExcelFile(event) {
     );
   } catch (error) {
     console.error(error);
-    showImportStatus("Import gagal. File Excel mungkin rusak atau formatnya berbeda jauh dari contoh.", "error");
+    showImportStatus("Import gagal. File Excel/CSV mungkin rusak atau formatnya berbeda jauh dari contoh.", "error");
   } finally {
     event.target.value = "";
   }
@@ -582,6 +595,12 @@ function parseWorkbookTransactions(workbook) {
   workbook.SheetNames.forEach((sheetName) => {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+    const backupTransactions = parseBackupTransactionRows(rows, sheetName);
+    if (backupTransactions.length) {
+      transactions.push(...backupTransactions);
+      return;
+    }
+
     const firstSheetDate = findFirstDate(rows) || inferDateFromSheetName(sheetName);
     const incomeHeader = findHeaderRow(rows, [0, 1, 2], ["uraian", "tanggal", "nominal"]);
     const expenseHeader = findHeaderRow(rows, [4, 5, 6, 7], ["uraian", "tanggal", "kategori", "nominal"]);
@@ -623,6 +642,65 @@ function parseWorkbookTransactions(workbook) {
   });
 
   return transactions;
+}
+
+function parseBackupTransactionRows(rows, sheetName) {
+  const headerRowIndex = rows.findIndex((row) => {
+    const normalized = row.map(normalizeText);
+    return normalized.includes("tanggal")
+      && normalized.includes("jenis")
+      && normalized.includes("kategori")
+      && normalized.includes("deskripsi")
+      && normalized.includes("nominal");
+  });
+
+  if (headerRowIndex < 0) return [];
+
+  const header = rows[headerRowIndex].map(normalizeText);
+  const indexes = {
+    id: header.indexOf("id"),
+    date: header.indexOf("tanggal"),
+    type: header.indexOf("jenis"),
+    category: header.indexOf("kategori"),
+    description: header.indexOf("deskripsi"),
+    amount: header.indexOf("nominal"),
+    source: header.indexOf("sumber"),
+    createdAt: header.indexOf("dibuat pada"),
+  };
+
+  return rows.slice(headerRowIndex + 1).reduce((transactions, row, index) => {
+    const rowNumber = headerRowIndex + index + 2;
+    const description = cleanText(row[indexes.description]);
+    const amount = parseAmount(row[indexes.amount]);
+    const date = parseExcelDate(row[indexes.date]);
+    const type = parseTransactionType(row[indexes.type]);
+
+    if (!date || !description || !amount || !type) return transactions;
+
+    const transaction = createTransaction({
+      type,
+      date,
+      category: cleanText(row[indexes.category]) || inferCategory(description, type),
+      description,
+      amount,
+      source: cleanText(row[indexes.source]) || `Backup ${sheetName} baris ${rowNumber}`,
+    });
+
+    const id = indexes.id >= 0 ? cleanText(row[indexes.id]) : "";
+    const createdAt = indexes.createdAt >= 0 ? cleanText(row[indexes.createdAt]) : "";
+    if (id) transaction.id = id;
+    if (createdAt) transaction.createdAt = createdAt;
+
+    transactions.push(transaction);
+    return transactions;
+  }, []);
+}
+
+function parseTransactionType(value) {
+  const normalized = normalizeText(value);
+  if (["income", "pemasukan", "masuk"].includes(normalized)) return "income";
+  if (["expense", "pengeluaran", "keluar"].includes(normalized)) return "expense";
+  return "";
 }
 
 async function handleChatSubmit(event) {
@@ -1066,13 +1144,15 @@ function render() {
 }
 
 function renderTotals() {
-  const totals = calculateTotals(state.transactions);
+  const transactions = getMonthFilteredTransactions();
+  const totals = calculateTotals(transactions);
   elements.incomeTotal.textContent = formatCurrency(totals.income);
   elements.expenseTotal.textContent = formatCurrency(totals.expense);
   elements.balanceTotal.textContent = formatCurrency(totals.balance);
-  elements.incomeTotal.closest(".metric-card").title = `Total pemasukan: ${formatCurrency(totals.income)}`;
-  elements.expenseTotal.closest(".metric-card").title = `Total pengeluaran: ${formatCurrency(totals.expense)}`;
-  elements.balanceTotal.closest(".metric-card").title = `Saldo bersih: ${formatCurrency(totals.balance)}`;
+  const periodLabel = getActiveMonthLabel();
+  elements.incomeTotal.closest(".metric-card").title = `Total pemasukan ${periodLabel}: ${formatCurrency(totals.income)}`;
+  elements.expenseTotal.closest(".metric-card").title = `Total pengeluaran ${periodLabel}: ${formatCurrency(totals.expense)}`;
+  elements.balanceTotal.closest(".metric-card").title = `Saldo bersih ${periodLabel}: ${formatCurrency(totals.balance)}`;
 }
 
 function renderCategoryOptions() {
@@ -1090,9 +1170,10 @@ function renderCategoryOptions() {
 
 function renderCategorySummary() {
   const selectedCategory = elements.categorySummarySelect.value;
+  const monthTransactions = getMonthFilteredTransactions();
   const selectedTransactions = selectedCategory === "all"
-    ? state.transactions
-    : state.transactions.filter((item) => item.category === selectedCategory);
+    ? monthTransactions
+    : monthTransactions.filter((item) => item.category === selectedCategory);
   const totals = calculateTotals(selectedTransactions);
 
   elements.categoryIncome.textContent = formatCurrency(totals.income);
@@ -1105,13 +1186,15 @@ function renderCategorySummary() {
   elements.categoryCount.closest(".interactive-card").dataset.tooltip = `${selectedTransactions.length} transaksi pada pilihan ini`;
   renderCategoryBars(selectedCategory);
   renderTrendChart(selectedCategory);
+  renderDailyExpenseChart(selectedCategory);
 }
 
 function renderCategoryBars(selectedCategory) {
   const grouped = new Map();
+  const monthTransactions = getMonthFilteredTransactions();
   const source = selectedCategory === "all"
-    ? state.transactions
-    : state.transactions.filter((item) => item.category === selectedCategory);
+    ? monthTransactions
+    : monthTransactions.filter((item) => item.category === selectedCategory);
 
   source.forEach((item) => {
     const current = grouped.get(item.category) || { income: 0, expense: 0 };
@@ -1198,9 +1281,10 @@ function handleTrendModeChange(event) {
 }
 
 function renderTrendChart(selectedCategory) {
+  const monthTransactions = getMonthFilteredTransactions();
   const source = selectedCategory === "all"
-    ? state.transactions
-    : state.transactions.filter((item) => item.category === selectedCategory);
+    ? monthTransactions
+    : monthTransactions.filter((item) => item.category === selectedCategory);
   const points = buildTrendPoints(source, state.trendMode);
 
   if (!points.length) {
@@ -1267,6 +1351,84 @@ function renderTrendChart(selectedCategory) {
   `;
 }
 
+function renderDailyExpenseChart(selectedCategory) {
+  const activeMonth = state.filters.month || getCurrentMonthInputValue();
+  elements.dailyExpenseMonthLabel.textContent = formatMonthLabel(activeMonth);
+
+  const monthTransactions = state.transactions.filter((item) => item.date.startsWith(activeMonth));
+  const source = selectedCategory === "all"
+    ? monthTransactions
+    : monthTransactions.filter((item) => item.category === selectedCategory);
+  const points = buildDailyExpensePoints(source, activeMonth);
+
+  if (!points.length) {
+    elements.dailyExpenseChart.innerHTML = `<p class="empty-state">Belum ada data pengeluaran untuk bulan ini.</p>`;
+    return;
+  }
+
+  const width = 640;
+  const height = 240;
+  const pad = { top: 24, right: 24, bottom: 42, left: 58 };
+  const chartWidth = width - pad.left - pad.right;
+  const chartHeight = height - pad.top - pad.bottom;
+  const maxValue = Math.max(...points.map((point) => point.expense), 1);
+  const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
+  const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
+  const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
+  const linePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
+  const areaPath = [
+    `${pad.left},${pad.top + chartHeight}`,
+    ...points.map((point, index) => `${x(index)},${y(point.expense)}`),
+    `${width - pad.right},${pad.top + chartHeight}`,
+  ].join(" ");
+  const labelIndexes = getChartLabelIndexes(points.length);
+  const totalExpense = points.reduce((sum, point) => sum + point.expense, 0);
+  const activeDays = points.filter((point) => point.expense > 0).length;
+  const peak = points.reduce((highest, point) => point.expense > highest.expense ? point : highest, points[0]);
+
+  elements.dailyExpenseChart.innerHTML = `
+    <div class="trend-summary">
+      <div class="interactive-card" data-tooltip="Total pengeluaran harian pada ${escapeHtml(formatMonthLabel(activeMonth))}">
+        <span>Total Pengeluaran</span>
+        <strong>${formatCompactCurrency(totalExpense)}</strong>
+      </div>
+      <div class="interactive-card" data-tooltip="Jumlah hari yang memiliki transaksi pengeluaran">
+        <span>Hari Aktif</span>
+        <strong>${activeDays}</strong>
+      </div>
+      <div class="interactive-card" data-tooltip="Pengeluaran tertinggi: ${escapeHtml(formatCurrency(peak.expense))}">
+        <span>Puncak Harian</span>
+        <strong>${escapeHtml(peak.label)}</strong>
+      </div>
+    </div>
+    <div class="trend-chart-wrap">
+      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafik pengeluaran harian">
+        <line class="axis-line" x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${width - pad.right}" y2="${pad.top + chartHeight}"></line>
+        <line class="axis-line" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}"></line>
+        ${[0.25, 0.5, 0.75, 1].map((ratio) => {
+          const gridY = pad.top + chartHeight - ratio * chartHeight;
+          return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
+        }).join("")}
+        <polygon class="daily-expense-area" points="${areaPath}"></polygon>
+        <polyline class="trend-line expense-line" points="${linePath}"></polyline>
+        ${points.map((point, index) => point.expense > 0 ? `
+          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
+            <title>${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
+            <circle class="expense-dot" cx="${x(index)}" cy="${y(point.expense)}" r="4.5"></circle>
+          </g>
+        ` : "").join("")}
+        ${labelIndexes.map((index) => `
+          <text class="axis-label" x="${x(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(points[index].label)}</text>
+        `).join("")}
+        <text class="axis-label" x="${pad.left}" y="16" text-anchor="start">${escapeHtml(formatCompactCurrency(maxValue))}</text>
+      </svg>
+    </div>
+    <div class="trend-legend">
+      <span><i class="legend-dot expense-dot"></i>Pengeluaran harian</span>
+    </div>
+  `;
+}
+
 function buildTrendPoints(transactions, mode) {
   const grouped = new Map();
   transactions.forEach((item) => {
@@ -1280,6 +1442,29 @@ function buildTrendPoints(transactions, mode) {
   return [...grouped.values()]
     .sort((a, b) => a.sort.localeCompare(b.sort))
     .slice(-12);
+}
+
+function buildDailyExpensePoints(transactions, monthValue) {
+  if (!/^\d{4}-\d{2}$/.test(monthValue)) return [];
+
+  const [year, month] = monthValue.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const grouped = new Map();
+
+  transactions.forEach((item) => {
+    if (item.type !== "expense" || !item.date.startsWith(monthValue)) return;
+    const day = Number(item.date.slice(8, 10));
+    grouped.set(day, (grouped.get(day) || 0) + item.amount);
+  });
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const day = index + 1;
+    return {
+      day,
+      label: String(day),
+      expense: grouped.get(day) || 0,
+    };
+  });
 }
 
 function getTrendKey(value, mode) {
@@ -1347,11 +1532,16 @@ function renderTable() {
 }
 
 function getFilteredTransactions() {
-  return state.transactions
+  return getMonthFilteredTransactions()
     .filter((item) => {
       return !state.filters.date || item.date === state.filters.date;
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
+function getMonthFilteredTransactions() {
+  if (!state.filters.month) return state.transactions;
+  return state.transactions.filter((item) => item.date.startsWith(state.filters.month));
 }
 
 function groupTransactionsByDate(transactions) {
@@ -1378,6 +1568,23 @@ function clearDateFilter() {
   state.filters.date = "";
   elements.filterDate.value = "";
   renderTable();
+}
+
+function handleMonthFilterChange(event) {
+  state.filters.month = event.target.value;
+  if (state.filters.date && state.filters.month && !state.filters.date.startsWith(state.filters.month)) {
+    state.filters.date = "";
+    elements.filterDate.value = "";
+  }
+  render();
+}
+
+function showAllMonths() {
+  state.filters.month = "";
+  state.filters.date = "";
+  elements.monthFilterInput.value = "";
+  elements.filterDate.value = "";
+  render();
 }
 
 function calculateTotals(transactions) {
@@ -1680,17 +1887,19 @@ function buildExportRows() {
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((item) => [
+      item.id,
       item.date,
       item.type === "income" ? "Pemasukan" : "Pengeluaran",
       item.category,
       item.description,
       item.amount,
       item.source || "Manual",
+      item.createdAt || "",
     ]);
 
   const totals = calculateTotals(state.transactions);
   return [
-    ["Tanggal", "Jenis", "Kategori", "Deskripsi", "Nominal", "Sumber"],
+    ["ID", "Tanggal", "Jenis", "Kategori", "Deskripsi", "Nominal", "Sumber", "Dibuat Pada"],
     ...transactionRows,
     [],
     ["Summary", "Pemasukan", "Pengeluaran", "Saldo Bersih"],
@@ -1757,14 +1966,28 @@ function formatCompactCurrency(value) {
   return compactCurrencyFormatter.format(value);
 }
 
+function formatMonthLabel(value) {
+  if (!/^\d{4}-\d{2}$/.test(value || "")) return "Semua bulan";
+  const [year, month] = value.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("id-ID", { month: "short", year: "numeric" });
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
 }
 
+function getActiveMonthLabel() {
+  return state.filters.month ? formatMonthLabel(state.filters.month) : "semua bulan";
+}
+
 function getTodayInputValue() {
   return dateToInputValue(new Date());
+}
+
+function getCurrentMonthInputValue() {
+  return getTodayInputValue().slice(0, 7);
 }
 
 function dateToInputValue(date) {
