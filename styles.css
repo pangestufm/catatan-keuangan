@@ -986,13 +986,21 @@ textarea:focus {
   stroke-linejoin: round;
 }
 
-.income-line,
+.income-line {
+  stroke: var(--green);
+  fill: none;
+}
+
 .income-dot {
   stroke: var(--green);
   fill: var(--green);
 }
 
-.expense-line,
+.expense-line {
+  stroke: var(--red);
+  fill: none;
+}
+
 .expense-dot {
   stroke: var(--red);
   fill: var(--red);
