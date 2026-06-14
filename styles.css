@@ -998,11 +998,6 @@ textarea:focus {
   fill: var(--red);
 }
 
-.daily-expense-area {
-  fill: color-mix(in srgb, var(--red) 16%, transparent);
-  stroke: none;
-}
-
 .trend-point circle {
   cursor: pointer;
   stroke-width: 2;

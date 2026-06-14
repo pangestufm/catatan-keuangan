@@ -1376,11 +1376,6 @@ function renderDailyExpenseChart(selectedCategory) {
   const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
   const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
   const linePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
-  const areaPath = [
-    `${pad.left},${pad.top + chartHeight}`,
-    ...points.map((point, index) => `${x(index)},${y(point.expense)}`),
-    `${width - pad.right},${pad.top + chartHeight}`,
-  ].join(" ");
   const labelIndexes = getChartLabelIndexes(points.length);
   const totalExpense = points.reduce((sum, point) => sum + point.expense, 0);
   const activeDays = points.filter((point) => point.expense > 0).length;
@@ -1409,7 +1404,6 @@ function renderDailyExpenseChart(selectedCategory) {
           const gridY = pad.top + chartHeight - ratio * chartHeight;
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
-        <polygon class="daily-expense-area" points="${areaPath}"></polygon>
         <polyline class="trend-line expense-line" points="${linePath}"></polyline>
         ${points.map((point, index) => point.expense > 0 ? `
           <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
