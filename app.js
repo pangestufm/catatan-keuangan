@@ -1301,8 +1301,8 @@ function renderTrendChart(selectedCategory) {
   const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
   const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
   const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
-  const incomePath = points.map((point, index) => `${x(index)},${y(point.income)}`).join(" ");
-  const expensePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
+  const incomePath = buildSmoothPath(points.map((point, index) => ({ x: x(index), y: y(point.income) })));
+  const expensePath = buildSmoothPath(points.map((point, index) => ({ x: x(index), y: y(point.expense) })));
   const labelIndexes = getChartLabelIndexes(points.length);
   const latest = points[points.length - 1];
 
@@ -1329,13 +1329,17 @@ function renderTrendChart(selectedCategory) {
           const gridY = pad.top + chartHeight - ratio * chartHeight;
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
-        <polyline class="trend-line income-line" points="${incomePath}"></polyline>
-        <polyline class="trend-line expense-line" points="${expensePath}"></polyline>
+        <path class="trend-line-glow income-glow" d="${incomePath}"></path>
+        <path class="trend-line-glow expense-glow" d="${expensePath}"></path>
+        <path class="trend-line income-line" d="${incomePath}"></path>
+        <path class="trend-line expense-line" d="${expensePath}"></path>
         ${points.map((point, index) => `
           <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
             <title>${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
-            <circle class="income-dot" cx="${x(index)}" cy="${y(point.income)}" r="5"></circle>
-            <circle class="expense-dot" cx="${x(index)}" cy="${y(point.expense)}" r="5"></circle>
+            <circle class="trend-dot-halo income-halo" cx="${x(index)}" cy="${y(point.income)}" r="${index === points.length - 1 ? 9 : 7}"></circle>
+            <circle class="trend-dot income-dot ${index === points.length - 1 ? "latest-dot" : ""}" cx="${x(index)}" cy="${y(point.income)}" r="${index === points.length - 1 ? 5.5 : 4.4}"></circle>
+            <circle class="trend-dot-halo expense-halo" cx="${x(index)}" cy="${y(point.expense)}" r="${index === points.length - 1 ? 9 : 7}"></circle>
+            <circle class="trend-dot expense-dot ${index === points.length - 1 ? "latest-dot" : ""}" cx="${x(index)}" cy="${y(point.expense)}" r="${index === points.length - 1 ? 5.5 : 4.4}"></circle>
           </g>
         `).join("")}
         ${labelIndexes.map((index) => `
@@ -1375,7 +1379,15 @@ function renderDailyExpenseChart(selectedCategory) {
   const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
   const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
   const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
-  const linePath = points.map((point, index) => `${x(index)},${y(point.expense)}`).join(" ");
+  const activePoints = points
+    .map((point, index) => ({ ...point, index }))
+    .filter((point) => point.expense > 0);
+  if (!activePoints.length) {
+    elements.dailyExpenseChart.innerHTML = `<p class="empty-state">Belum ada data pengeluaran untuk bulan ini.</p>`;
+    return;
+  }
+
+  const linePath = buildSmoothPath(activePoints.map((point) => ({ x: x(point.index), y: y(point.expense) })));
   const labelIndexes = getChartLabelIndexes(points.length);
   const totalExpense = points.reduce((sum, point) => sum + point.expense, 0);
   const activeDays = points.filter((point) => point.expense > 0).length;
@@ -1404,13 +1416,15 @@ function renderDailyExpenseChart(selectedCategory) {
           const gridY = pad.top + chartHeight - ratio * chartHeight;
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
-        <polyline class="trend-line expense-line" points="${linePath}"></polyline>
-        ${points.map((point, index) => point.expense > 0 ? `
+        <path class="trend-line-glow expense-glow" d="${linePath}"></path>
+        <path class="trend-line expense-line" d="${linePath}"></path>
+        ${activePoints.map((point, activeIndex) => `
           <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
             <title>${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
-            <circle class="expense-dot" cx="${x(index)}" cy="${y(point.expense)}" r="4.5"></circle>
+            <circle class="trend-dot-halo expense-halo" cx="${x(point.index)}" cy="${y(point.expense)}" r="${activeIndex === activePoints.length - 1 ? 9 : 7}"></circle>
+            <circle class="trend-dot expense-dot ${activeIndex === activePoints.length - 1 ? "latest-dot" : ""}" cx="${x(point.index)}" cy="${y(point.expense)}" r="${activeIndex === activePoints.length - 1 ? 5.5 : 4.4}"></circle>
           </g>
-        ` : "").join("")}
+        `).join("")}
         ${labelIndexes.map((index) => `
           <text class="axis-label" x="${x(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(points[index].label)}</text>
         `).join("")}
@@ -1436,6 +1450,30 @@ function buildTrendPoints(transactions, mode) {
   return [...grouped.values()]
     .sort((a, b) => a.sort.localeCompare(b.sort))
     .slice(-12);
+}
+
+function buildSmoothPath(points) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+
+  const commands = [`M ${points[0].x} ${points[0].y}`];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const previous = points[index - 1] || current;
+    const afterNext = points[index + 2] || next;
+    const cp1 = {
+      x: current.x + (next.x - previous.x) / 6,
+      y: current.y + (next.y - previous.y) / 6,
+    };
+    const cp2 = {
+      x: next.x - (afterNext.x - current.x) / 6,
+      y: next.y - (afterNext.y - current.y) / 6,
+    };
+    commands.push(`C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${next.x} ${next.y}`);
+  }
+  return commands.join(" ");
 }
 
 function buildDailyExpensePoints(transactions, monthValue) {

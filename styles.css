@@ -959,8 +959,10 @@ textarea:focus {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
-  padding: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 36%, transparent), transparent 42%),
+    var(--surface);
+  padding: 14px;
 }
 
 .trend-chart {
@@ -969,26 +971,47 @@ textarea:focus {
   min-width: 520px;
 }
 
-.axis-line,
-.grid-line {
+.axis-line {
   stroke: var(--line);
-  stroke-width: 1;
+  stroke-width: 1.1;
+  opacity: 0.72;
 }
 
 .grid-line {
-  opacity: 0.72;
+  stroke: color-mix(in srgb, var(--line) 72%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 8;
+}
+
+.grid-line {
+  opacity: 0.62;
 }
 
 .trend-line {
   fill: none;
-  stroke-width: 4;
+  stroke-width: 3.2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.trend-line-glow {
+  fill: none;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.16;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 .income-line {
   stroke: var(--green);
   fill: none;
+}
+
+.income-glow {
+  stroke: var(--green);
 }
 
 .income-dot {
@@ -999,6 +1022,10 @@ textarea:focus {
 .expense-line {
   stroke: var(--red);
   fill: none;
+}
+
+.expense-glow {
+  stroke: var(--red);
 }
 
 .expense-dot {
@@ -1012,14 +1039,34 @@ textarea:focus {
   opacity: 0 !important;
 }
 
-.trend-point circle {
-  cursor: pointer;
-  stroke-width: 2;
-  stroke: var(--surface);
-  transition: r 160ms ease, filter 160ms ease;
+.trend-dot-halo {
+  fill: color-mix(in srgb, var(--surface) 84%, transparent);
+  stroke-width: 1;
+  opacity: 0.92;
+  pointer-events: none;
 }
 
-.trend-point:hover circle {
+.income-halo {
+  stroke: color-mix(in srgb, var(--green) 38%, transparent);
+}
+
+.expense-halo {
+  stroke: color-mix(in srgb, var(--red) 38%, transparent);
+}
+
+.trend-dot {
+  cursor: pointer;
+  stroke-width: 2.8;
+  stroke: var(--surface);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.18));
+  transition: r 160ms ease, stroke-width 160ms ease, filter 160ms ease;
+}
+
+.latest-dot {
+  stroke-width: 3.4;
+}
+
+.trend-point:hover .trend-dot {
   r: 8;
   filter: drop-shadow(0 0 10px color-mix(in srgb, var(--primary) 38%, transparent));
 }
