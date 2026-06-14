@@ -998,6 +998,12 @@ textarea:focus {
   fill: var(--red);
 }
 
+.daily-expense-area {
+  display: none !important;
+  fill: transparent !important;
+  opacity: 0 !important;
+}
+
 .trend-point circle {
   cursor: pointer;
   stroke-width: 2;
