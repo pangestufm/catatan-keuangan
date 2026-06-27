@@ -5,6 +5,8 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
+const BLOB_STORE_NAME = "catatan-keuangan";
+
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return respond(204, {});
@@ -54,36 +56,88 @@ exports.handler = async (event) => {
 
 async function readState(workspaceId) {
   const stateKey = createStateKey(workspaceId);
-  const response = await supabaseFetch(`/rest/v1/app_state?state_key=eq.${encodeURIComponent(stateKey)}&select=state_value,updated_at`);
-  if (!response.ok) {
-    throw new Error(`Supabase read failed: ${response.status}`);
+  const blobState = await readBlobState(stateKey);
+  if (blobState) {
+    return blobState;
   }
 
-  const rows = await response.json();
-  const row = Array.isArray(rows) ? rows[0] : null;
+  const migratedState = await readLegacySupabaseState(stateKey);
+  if (migratedState) {
+    await writeBlobState(stateKey, migratedState.transactions, {
+      migratedFrom: "supabase",
+      migratedAt: new Date().toISOString(),
+    });
+    return { ...migratedState, storage: "netlify-blobs", migratedFrom: "supabase" };
+  }
+
   return {
-    transactions: Array.isArray(row?.state_value) ? sanitizeTransactions(row.state_value) : [],
-    updatedAt: row?.updated_at || null,
+    transactions: [],
+    updatedAt: null,
+    storage: "netlify-blobs",
   };
 }
 
 async function writeState(workspaceId, transactions) {
   const stateKey = createStateKey(workspaceId);
-  const response = await supabaseFetch("/rest/v1/app_state?on_conflict=state_key", {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates",
-    },
-    body: JSON.stringify({
-      state_key: stateKey,
-      state_value: transactions,
-      updated_at: new Date().toISOString(),
-    }),
-  });
+  await writeBlobState(stateKey, transactions);
+}
 
-  if (!response.ok) {
-    throw new Error(`Supabase write failed: ${response.status}`);
+async function getTransactionsStore() {
+  const { getStore } = await import("@netlify/blobs");
+  return getStore({ name: BLOB_STORE_NAME, consistency: "strong" });
+}
+
+async function readBlobState(stateKey) {
+  const store = await getTransactionsStore();
+  const entry = await store.get(stateKey, { type: "json", consistency: "strong" });
+  if (!entry) return null;
+
+  return {
+    transactions: sanitizeTransactions(entry.transactions || []),
+    updatedAt: entry.updatedAt || null,
+    storage: "netlify-blobs",
+  };
+}
+
+async function writeBlobState(stateKey, transactions, extraMetadata = {}) {
+  const store = await getTransactionsStore();
+  const updatedAt = new Date().toISOString();
+  await store.setJSON(
+    stateKey,
+    {
+      transactions: sanitizeTransactions(transactions),
+      updatedAt,
+      version: 2,
+      storage: "netlify-blobs",
+    },
+    {
+      metadata: {
+        updatedAt,
+        ...extraMetadata,
+      },
+    },
+  );
+}
+
+async function readLegacySupabaseState(stateKey) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null;
   }
+
+  const response = await supabaseFetch(`/rest/v1/app_state?state_key=eq.${encodeURIComponent(stateKey)}&select=state_value,updated_at`);
+  if (!response.ok) {
+    throw new Error(`Supabase migration read failed: ${response.status}`);
+  }
+
+  const rows = await response.json();
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!Array.isArray(row?.state_value)) return null;
+
+  return {
+    transactions: sanitizeTransactions(row.state_value),
+    updatedAt: row?.updated_at || null,
+    storage: "supabase",
+  };
 }
 
 async function supabaseFetch(path, options = {}) {
