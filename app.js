@@ -416,7 +416,7 @@ async function apiRequest(method, payload) {
 
 async function requestApiUrl(apiUrl, method, payload) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(apiUrl, {
