@@ -98,12 +98,31 @@ async function getDatabasePool() {
     return globalThis.__catatanKeuanganDatabasePool;
   }
 
+  const databaseModule = await import("@netlify/database");
+  const getDatabase = databaseModule.getDatabase || databaseModule.default?.getDatabase;
+  if (typeof getDatabase === "function") {
+    const database = getDatabase();
+    if (database?.pool?.query) {
+      globalThis.__catatanKeuanganDatabasePool = database.pool;
+      return globalThis.__catatanKeuanganDatabasePool;
+    }
+
+    if (database?.sql?.unsafe) {
+      globalThis.__catatanKeuanganDatabasePool = {
+        query: async (text, params = []) => ({
+          rows: await database.sql.unsafe(text, params),
+        }),
+      };
+      return globalThis.__catatanKeuanganDatabasePool;
+    }
+  }
+
   const pgModule = await import("pg");
   const Pool = pgModule.Pool || pgModule.default?.Pool;
   const connectionString = await getDatabaseConnectionString();
 
   if (!connectionString) {
-    throw new Error("Netlify Database belum terhubung ke deploy ini. Pastikan database sudah dibuat, NETLIFY_DB_URL tersedia di deploy, lalu redeploy production.");
+    throw new Error("Netlify Database belum terhubung ke deploy ini. Native driver dan NETLIFY_DB_URL belum tersedia di function production.");
   }
 
   globalThis.__catatanKeuanganDatabasePool = new Pool({
@@ -141,6 +160,7 @@ async function checkHealth(workspaceId) {
     hasSupabaseBackup: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
     tableReady: false,
     workspaceCount: 0,
+    driver: "",
     message: "",
   };
 
@@ -150,6 +170,7 @@ async function checkHealth(workspaceId) {
     const pool = await getDatabasePool();
     await ensureDatabaseTable(pool);
     const countResult = await pool.query("select count(*)::int as count from finance_workspace_state");
+    health.driver = globalThis.__catatanKeuanganDatabasePool?.query ? "netlify-database" : "unknown";
     health.tableReady = true;
     health.workspaceCount = Number(countResult.rows[0]?.count || 0);
     health.ok = true;
