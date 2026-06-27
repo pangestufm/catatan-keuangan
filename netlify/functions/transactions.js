@@ -5,7 +5,7 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const BLOB_STORE_NAME = "catatan-keuangan";
+const LEGACY_BLOB_STORE_NAME = "catatan-keuangan";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -34,7 +34,7 @@ exports.handler = async (event) => {
 
     if (method === "DELETE") {
       await writeState(workspaceId, []);
-      return respond(200, { transactions: [], updatedAt: new Date().toISOString() });
+      return respond(200, { transactions: [], updatedAt: new Date().toISOString(), storage: "netlify-database" });
     }
 
     if (method === "PUT" || method === "POST") {
@@ -45,7 +45,7 @@ exports.handler = async (event) => {
 
       const transactions = sanitizeTransactions(payload.transactions);
       await writeState(workspaceId, transactions);
-      return respond(200, { transactions, updatedAt: new Date().toISOString() });
+      return respond(200, { transactions, updatedAt: new Date().toISOString(), storage: "netlify-database" });
     }
 
     return respond(405, { error: "Method not allowed" });
@@ -56,67 +56,117 @@ exports.handler = async (event) => {
 
 async function readState(workspaceId) {
   const stateKey = createStateKey(workspaceId);
-  const blobState = await readBlobState(stateKey);
-  if (blobState) {
-    return blobState;
+  const databaseState = await readDatabaseState(stateKey);
+  if (databaseState) {
+    return databaseState;
   }
 
-  const migratedState = await readLegacySupabaseState(stateKey);
-  if (migratedState) {
-    await writeBlobState(stateKey, migratedState.transactions, {
-      migratedFrom: "supabase",
-      migratedAt: new Date().toISOString(),
-    });
-    return { ...migratedState, storage: "netlify-blobs", migratedFrom: "supabase" };
+  const legacyState = await readLegacyBlobState(stateKey) || await readLegacySupabaseState(stateKey);
+  if (legacyState) {
+    await writeDatabaseState(stateKey, legacyState.transactions, legacyState.storage || "legacy");
+    return {
+      transactions: legacyState.transactions,
+      updatedAt: legacyState.updatedAt || new Date().toISOString(),
+      storage: "netlify-database",
+      migratedFrom: legacyState.storage || "legacy",
+    };
   }
 
   return {
     transactions: [],
     updatedAt: null,
-    storage: "netlify-blobs",
+    storage: "netlify-database",
   };
 }
 
 async function writeState(workspaceId, transactions) {
-  const stateKey = createStateKey(workspaceId);
-  await writeBlobState(stateKey, transactions);
+  await writeDatabaseState(createStateKey(workspaceId), transactions);
 }
 
-async function getTransactionsStore() {
-  const { getStore } = await import("@netlify/blobs");
-  return getStore({ name: BLOB_STORE_NAME, consistency: "strong" });
+async function getDatabasePool() {
+  if (globalThis.__catatanKeuanganDatabasePool) {
+    return globalThis.__catatanKeuanganDatabasePool;
+  }
+
+  const [{ getConnectionString }, pgModule] = await Promise.all([
+    import("@netlify/database"),
+    import("pg"),
+  ]);
+  const Pool = pgModule.Pool || pgModule.default?.Pool;
+  const connectionString = getConnectionString();
+
+  if (!connectionString) {
+    throw new Error("Netlify Database belum tersedia. Buat database di menu Netlify Database lalu redeploy.");
+  }
+
+  globalThis.__catatanKeuanganDatabasePool = new Pool({
+    connectionString,
+    max: 1,
+  });
+  return globalThis.__catatanKeuanganDatabasePool;
 }
 
-async function readBlobState(stateKey) {
-  const store = await getTransactionsStore();
-  const entry = await store.get(stateKey, { type: "json", consistency: "strong" });
-  if (!entry) return null;
+async function readDatabaseState(stateKey) {
+  const pool = await getDatabasePool();
+  await ensureDatabaseTable(pool);
+  const result = await pool.query(
+    "select state_value, updated_at from finance_workspace_state where state_key = $1 limit 1",
+    [stateKey],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
 
   return {
-    transactions: sanitizeTransactions(entry.transactions || []),
-    updatedAt: entry.updatedAt || null,
-    storage: "netlify-blobs",
+    transactions: sanitizeTransactions(row.state_value || []),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+    storage: "netlify-database",
   };
 }
 
-async function writeBlobState(stateKey, transactions, extraMetadata = {}) {
-  const store = await getTransactionsStore();
+async function writeDatabaseState(stateKey, transactions, migratedFrom = "") {
+  const pool = await getDatabasePool();
+  await ensureDatabaseTable(pool);
   const updatedAt = new Date().toISOString();
-  await store.setJSON(
-    stateKey,
-    {
-      transactions: sanitizeTransactions(transactions),
-      updatedAt,
-      version: 2,
-      storage: "netlify-blobs",
-    },
-    {
-      metadata: {
-        updatedAt,
-        ...extraMetadata,
-      },
-    },
+  await pool.query(
+    `
+      insert into finance_workspace_state (state_key, state_value, updated_at, migrated_from)
+      values ($1, $2::jsonb, $3::timestamptz, nullif($4, ''))
+      on conflict (state_key)
+      do update set
+        state_value = excluded.state_value,
+        updated_at = excluded.updated_at,
+        migrated_from = coalesce(finance_workspace_state.migrated_from, excluded.migrated_from)
+    `,
+    [stateKey, JSON.stringify(sanitizeTransactions(transactions)), updatedAt, migratedFrom],
   );
+}
+
+async function ensureDatabaseTable(pool) {
+  await pool.query(`
+    create table if not exists finance_workspace_state (
+      state_key text primary key,
+      state_value jsonb not null default '[]'::jsonb,
+      updated_at timestamptz not null default now(),
+      migrated_from text
+    )
+  `);
+}
+
+async function readLegacyBlobState(stateKey) {
+  try {
+    const { getStore } = await import("@netlify/blobs");
+    const store = getStore({ name: LEGACY_BLOB_STORE_NAME, consistency: "strong" });
+    const entry = await store.get(stateKey, { type: "json", consistency: "strong" });
+    if (!entry || !Array.isArray(entry.transactions)) return null;
+
+    return {
+      transactions: sanitizeTransactions(entry.transactions),
+      updatedAt: entry.updatedAt || null,
+      storage: "netlify-blobs",
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function readLegacySupabaseState(stateKey) {
@@ -143,10 +193,6 @@ async function readLegacySupabaseState(stateKey) {
 async function supabaseFetch(path, options = {}) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY harus diisi di Netlify environment variables.");
-  }
 
   return fetch(`${supabaseUrl}${path}`, {
     ...options,

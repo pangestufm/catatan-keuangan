@@ -1,6 +1,8 @@
 {
   "private": true,
   "dependencies": {
-    "@netlify/blobs": "latest"
+    "@netlify/blobs": "latest",
+    "@netlify/database": "latest",
+    "pg": "latest"
   }
 }

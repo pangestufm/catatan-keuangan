@@ -1,6 +1,6 @@
 # Catatan Keuangan
 
-Aplikasi web hybrid untuk mencatat pemasukan dan pengeluaran. Bisa dipakai offline dari komputer, dan bisa online memakai Netlify untuk hosting, serverless function, dan database Netlify Blobs.
+Aplikasi web hybrid untuk mencatat pemasukan dan pengeluaran. Bisa dipakai offline dari komputer, dan bisa online memakai Netlify untuk hosting, serverless function, dan Netlify Database.
 
 ## Cara membuka offline
 
@@ -22,7 +22,7 @@ git push -u origin main
 
 3. Di Netlify, pilih `Add new site` > `Import an existing project`.
 4. Pilih repository GitHub tadi.
-5. Netlify akan membaca `netlify.toml`, memasang dependency `@netlify/blobs`, memakai folder root sebagai static site, serta `netlify/functions` sebagai API.
+5. Netlify akan membaca `netlify.toml`, menjalankan migrasi database, memasang dependency, memakai folder root sebagai static site, serta `netlify/functions` sebagai API.
 
 Pilihan upload manual:
 
@@ -59,27 +59,43 @@ OPENAI_MODEL=gpt-4o-mini
 
 `APP_ACCESS_TOKEN` wajib untuk mode online. Variabel AI hanya diperlukan jika ingin fitur agent chat/voice memakai Gemini atau OpenAI.
 
-### 3. Migrasi dari Supabase lama
+### 3. Buat Netlify Database
 
-Data baru akan tersimpan di Netlify Blobs. Jika sebelumnya kamu sudah memakai Supabase, biarkan sementara env lama ini tetap ada di Netlify:
+Di Netlify dashboard, buka menu `Database`, lalu buat database untuk site ini. Saat deploy berjalan, Netlify akan menjalankan migration SQL di:
+
+```text
+netlify/database/migrations/202606270001_create_finance_workspace_state.sql
+```
+
+Data transaksi online akan disimpan ke tabel Postgres `finance_workspace_state`.
+
+### 4. Migrasi dari Supabase atau Blob lama
+
+Data baru akan tersimpan di Netlify Database. Jika sebelumnya kamu sudah memakai Supabase, biarkan sementara env lama ini tetap ada di Netlify:
 
 ```text
 SUPABASE_URL=isi_dengan_project_url_supabase
 SUPABASE_SERVICE_ROLE_KEY=isi_dengan_service_role_key
 ```
 
-Saat workspace pertama kali dibuka, function akan membaca data lama dari Supabase, menyalinnya ke Netlify Blobs, lalu setelah itu aplikasi memakai Netlify Blobs. Setelah kamu memastikan data sudah muncul, env Supabase bisa dihapus.
+Saat workspace pertama kali dibuka, function akan mencari data lama dengan urutan:
 
-### 4. Login ke aplikasi
+1. Netlify Database
+2. Netlify Blobs legacy, jika sempat memakai versi Blob
+3. Supabase legacy, jika env Supabase masih ada
+
+Jika data lama ditemukan, function akan menyalinnya ke Netlify Database. Setelah kamu memastikan data sudah muncul, env Supabase boleh dihapus.
+
+### 5. Login ke aplikasi
 
 Saat membuka web, aplikasi meminta:
 
 - `Workspace`: nama ruang data, contoh `keluarga-ando`.
 - `Access token`: isi dari `APP_ACCESS_TOKEN` di Netlify.
 
-Data akan disimpan di Netlify Blobs dengan key `transactions:<workspace>`. Jadi jika repo di-fork, di-clone, atau ada beberapa workspace, catatan tidak saling bentrok selama workspace atau environment Netlify-nya berbeda.
+Data akan disimpan di Netlify Database dengan key `transactions:<workspace>`. Jadi jika repo di-fork, di-clone, atau ada beberapa workspace, catatan tidak saling bentrok selama workspace atau environment Netlify-nya berbeda.
 
-### 5. Cek apakah online aktif
+### 6. Cek apakah online aktif
 
 Saat dibuka dari URL Netlify, indikator di header akan berubah menjadi `Mode Online`.
 Jika masih `Mode Lokal`, cek:
@@ -111,4 +127,4 @@ Jika masih `Mode Lokal`, cek:
 
 ## Catatan penyimpanan
 
-Mode lokal menyimpan data di browser/perangkat yang sama. Mode online menyimpan data di Netlify Blobs melalui Netlify Function dan tetap mencadangkan data lokal di browser.
+Mode lokal menyimpan data di browser/perangkat yang sama. Mode online menyimpan data di Netlify Database melalui Netlify Function dan tetap mencadangkan data lokal di browser.
