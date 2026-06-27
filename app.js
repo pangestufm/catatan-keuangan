@@ -71,6 +71,7 @@ const state = {
   workspaceId: "",
   accessToken: "",
   isLocalOnly: false,
+  lastOnlineError: "",
   pendingDraft: null,
   isSyncing: false,
   syncTimer: null,
@@ -366,7 +367,8 @@ async function initializeOnlineStorage() {
     }
   } catch (error) {
     state.storageMode = "local";
-    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "API online belum aktif, data disimpan di browser ini.");
+    state.lastOnlineError = error.message || "API online belum aktif.";
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, `API online belum aktif: ${state.lastOnlineError}`);
     console.info("Online storage tidak aktif:", error);
   }
 }
@@ -389,7 +391,8 @@ async function persistRemoteTransactions() {
     updateStorageStatus(`Mode Online · ${state.workspaceId}`, "Perubahan tersimpan di server.");
   } catch (error) {
     state.storageMode = "local";
-    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "Gagal sync ke server, perubahan tetap tersimpan lokal.");
+    state.lastOnlineError = error.message || "Gagal sync ke server.";
+    updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, `Gagal sync ke server: ${state.lastOnlineError}`);
     console.error("Sync online gagal:", error);
   } finally {
     state.isSyncing = false;
@@ -398,6 +401,7 @@ async function persistRemoteTransactions() {
 
 async function apiRequest(method, payload) {
   const urls = state.activeApiUrl ? [state.activeApiUrl] : API_URLS;
+  let firstError;
   let lastError;
 
   for (const apiUrl of urls) {
@@ -406,12 +410,13 @@ async function apiRequest(method, payload) {
       state.activeApiUrl = apiUrl;
       return data;
     } catch (error) {
+      if (!firstError) firstError = error;
       lastError = error;
       if (state.activeApiUrl) break;
     }
   }
 
-  throw lastError || new Error("API online tidak tersedia.");
+  throw firstError || lastError || new Error("API online tidak tersedia.");
 }
 
 async function requestApiUrl(apiUrl, method, payload) {
@@ -434,7 +439,8 @@ async function requestApiUrl(apiUrl, method, payload) {
     }
 
     if (!response.ok) {
-      throw new Error(`API error ${response.status}`);
+      const details = await readApiError(response);
+      throw new Error(details || `API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -446,6 +452,23 @@ async function requestApiUrl(apiUrl, method, payload) {
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+async function readApiError(response) {
+  try {
+    const payload = await response.clone().json();
+    const message = payload?.message || payload?.error;
+    if (message) return `API error ${response.status}: ${message}`;
+  } catch {
+    try {
+      const text = await response.clone().text();
+      if (text) return `API error ${response.status}: ${text.slice(0, 180)}`;
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
 }
 
 function createApiHeaders(payload) {

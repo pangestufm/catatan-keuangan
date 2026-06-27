@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const LEGACY_BLOB_STORE_NAME = "catatan-keuangan";
+const STORAGE_NAME = "netlify-database";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -22,7 +23,12 @@ exports.handler = async (event) => {
 
   try {
     const method = event.httpMethod;
+    const query = event.queryStringParameters || {};
     const workspaceId = sanitizeWorkspace(event.headers["x-app-workspace"] || event.headers["X-App-Workspace"] || "");
+
+    if (method === "GET" && query.health === "1") {
+      return respond(200, await checkHealth(workspaceId));
+    }
 
     if (!workspaceId) {
       return respond(422, { error: "Workspace wajib diisi." });
@@ -34,11 +40,15 @@ exports.handler = async (event) => {
 
     if (method === "DELETE") {
       await writeState(workspaceId, []);
-      return respond(200, { transactions: [], updatedAt: new Date().toISOString(), storage: "netlify-database" });
+      return respond(200, { transactions: [], updatedAt: new Date().toISOString(), storage: STORAGE_NAME });
     }
 
     if (method === "PUT" || method === "POST") {
       const payload = JSON.parse(event.body || "{}");
+      if (payload?.action === "migrate-all") {
+        return respond(200, await migrateAllLegacySupabaseData());
+      }
+
       if (!payload || !Array.isArray(payload.transactions)) {
         return respond(422, { error: "Payload harus berisi transactions array." });
       }
@@ -67,7 +77,7 @@ async function readState(workspaceId) {
     return {
       transactions: legacyState.transactions,
       updatedAt: legacyState.updatedAt || new Date().toISOString(),
-      storage: "netlify-database",
+      storage: STORAGE_NAME,
       migratedFrom: legacyState.storage || "legacy",
     };
   }
@@ -75,7 +85,7 @@ async function readState(workspaceId) {
   return {
     transactions: [],
     updatedAt: null,
-    storage: "netlify-database",
+    storage: STORAGE_NAME,
   };
 }
 
@@ -88,15 +98,12 @@ async function getDatabasePool() {
     return globalThis.__catatanKeuanganDatabasePool;
   }
 
-  const [{ getConnectionString }, pgModule] = await Promise.all([
-    import("@netlify/database"),
-    import("pg"),
-  ]);
+  const pgModule = await import("pg");
   const Pool = pgModule.Pool || pgModule.default?.Pool;
-  const connectionString = getConnectionString();
+  const connectionString = await getDatabaseConnectionString();
 
   if (!connectionString) {
-    throw new Error("Netlify Database belum tersedia. Buat database di menu Netlify Database lalu redeploy.");
+    throw new Error("Netlify Database belum terhubung ke deploy ini. Pastikan database sudah dibuat, NETLIFY_DB_URL tersedia di deploy, lalu redeploy production.");
   }
 
   globalThis.__catatanKeuanganDatabasePool = new Pool({
@@ -104,6 +111,54 @@ async function getDatabasePool() {
     max: 1,
   });
   return globalThis.__catatanKeuanganDatabasePool;
+}
+
+async function getDatabaseConnectionString() {
+  if (process.env.NETLIFY_DB_URL) return process.env.NETLIFY_DB_URL;
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.NETLIFY_DATABASE_URL) return process.env.NETLIFY_DATABASE_URL;
+
+  try {
+    const databaseModule = await import("@netlify/database");
+    const getConnectionString = databaseModule.getConnectionString || databaseModule.default?.getConnectionString;
+    if (typeof getConnectionString === "function") {
+      return getConnectionString() || "";
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
+async function checkHealth(workspaceId) {
+  const health = {
+    ok: false,
+    storage: STORAGE_NAME,
+    workspace: workspaceId || null,
+    hasNetlifyDbUrl: Boolean(process.env.NETLIFY_DB_URL),
+    hasDatabaseUrl: Boolean(process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL),
+    hasSupabaseBackup: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+    tableReady: false,
+    workspaceCount: 0,
+    message: "",
+  };
+
+  try {
+    const connectionString = await getDatabaseConnectionString();
+    health.hasConnectionString = Boolean(connectionString);
+    const pool = await getDatabasePool();
+    await ensureDatabaseTable(pool);
+    const countResult = await pool.query("select count(*)::int as count from finance_workspace_state");
+    health.tableReady = true;
+    health.workspaceCount = Number(countResult.rows[0]?.count || 0);
+    health.ok = true;
+    health.message = "Netlify Database aktif dan tabel aplikasi siap.";
+    return health;
+  } catch (error) {
+    health.message = error.message;
+    return health;
+  }
 }
 
 async function readDatabaseState(stateKey) {
@@ -119,7 +174,7 @@ async function readDatabaseState(stateKey) {
   return {
     transactions: sanitizeTransactions(row.state_value || []),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
-    storage: "netlify-database",
+    storage: STORAGE_NAME,
   };
 }
 
@@ -149,6 +204,11 @@ async function ensureDatabaseTable(pool) {
       updated_at timestamptz not null default now(),
       migrated_from text
     )
+  `);
+
+  await pool.query(`
+    create index if not exists finance_workspace_state_updated_at_idx
+      on finance_workspace_state (updated_at desc)
   `);
 }
 
@@ -187,6 +247,36 @@ async function readLegacySupabaseState(stateKey) {
     transactions: sanitizeTransactions(row.state_value),
     updatedAt: row?.updated_at || null,
     storage: "supabase",
+  };
+}
+
+async function migrateAllLegacySupabaseData() {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      migrated: 0,
+      storage: STORAGE_NAME,
+      message: "Supabase env tidak tersedia, tidak ada backup Supabase yang bisa dimigrasikan otomatis.",
+    };
+  }
+
+  const response = await supabaseFetch("/rest/v1/app_state?select=state_key,state_value,updated_at");
+  if (!response.ok) {
+    throw new Error(`Supabase migration read failed: ${response.status}`);
+  }
+
+  const rows = await response.json();
+  const migratedWorkspaces = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row?.state_key || !Array.isArray(row.state_value)) continue;
+    await writeDatabaseState(row.state_key, row.state_value, "supabase");
+    migratedWorkspaces.push(row.state_key);
+  }
+
+  return {
+    migrated: migratedWorkspaces.length,
+    workspaces: migratedWorkspaces,
+    storage: STORAGE_NAME,
+    message: `${migratedWorkspaces.length} workspace berhasil dimigrasikan ke Netlify Database.`,
   };
 }
 
