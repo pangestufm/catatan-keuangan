@@ -132,6 +132,9 @@ const elements = {
   editDraftButton: document.querySelector("#editDraftButton"),
   cancelDraftButton: document.querySelector("#cancelDraftButton"),
   quickEntryButton: document.querySelector("#quickEntryButton"),
+  toolsPanelButton: document.querySelector("#toolsPanelButton"),
+  toolsPanel: document.querySelector("#toolsPanel"),
+  closeToolsPanelButton: document.querySelector("#closeToolsPanelButton"),
   detailToggleButton: document.querySelector("#detailToggleButton"),
   quickEntryModal: document.querySelector("#quickEntryModal"),
   closeQuickEntryButton: document.querySelector("#closeQuickEntryButton"),
@@ -205,6 +208,10 @@ function bindEvents() {
   elements.editDraftButton.addEventListener("click", editDraftManually);
   elements.cancelDraftButton.addEventListener("click", clearDraft);
   elements.quickEntryButton.addEventListener("click", openQuickEntryModal);
+  elements.toolsPanelButton.addEventListener("click", toggleToolsPanel);
+  elements.closeToolsPanelButton.addEventListener("click", () => closeToolsPanel(true));
+  elements.toolsPanel.addEventListener("click", closeToolsPanelFromBackdrop);
+  document.addEventListener("keydown", closePanelsWithEscape);
   elements.detailToggleButton.addEventListener("click", openDetailTransactions);
   elements.closeQuickEntryButton.addEventListener("click", closeQuickEntryModal);
   elements.closeDetailButton.addEventListener("click", closeDetailTransactions);
@@ -311,6 +318,43 @@ function closeQuickEntryFromBackdrop(event) {
   if (event.target === elements.quickEntryModal) {
     closeQuickEntryModal();
   }
+}
+
+function openToolsPanel() {
+  elements.toolsPanel.classList.add("is-open");
+  elements.toolsPanel.setAttribute("aria-hidden", "false");
+  elements.toolsPanelButton.setAttribute("aria-expanded", "true");
+  elements.closeToolsPanelButton.focus();
+}
+
+function toggleToolsPanel() {
+  if (elements.toolsPanel.classList.contains("is-open")) {
+    closeToolsPanel();
+    return;
+  }
+  openToolsPanel();
+}
+
+function closeToolsPanel(shouldRestoreFocus = false) {
+  elements.toolsPanel.classList.remove("is-open");
+  elements.toolsPanel.setAttribute("aria-hidden", "true");
+  elements.toolsPanelButton.setAttribute("aria-expanded", "false");
+  if (shouldRestoreFocus) {
+    elements.toolsPanelButton.focus();
+  }
+}
+
+function closeToolsPanelFromBackdrop(event) {
+  if (event.target === elements.toolsPanel) {
+    closeToolsPanel(true);
+  }
+}
+
+function closePanelsWithEscape(event) {
+  if (event.key !== "Escape") return;
+  closeToolsPanel(true);
+  closeQuickEntryModal();
+  closeDetailTransactions();
 }
 
 function openDetailTransactions() {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Catatan Keuangan</title>
-    <link rel="stylesheet" href="styles.css?v=20260627-netlifydb-native" />
+    <link rel="stylesheet" href="styles.css?v=20260708-kpi-refine" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -35,7 +35,39 @@
           <h1>Catatan Keuangan</h1>
           <p class="storage-status" id="storageStatus">Mode Lokal</p>
         </div>
-        <div class="topbar-actions" aria-label="Aksi data">
+        <div class="topbar-actions" aria-label="Aksi cepat">
+          <button class="button secondary tools-toggle" id="toolsPanelButton" type="button" aria-controls="toolsPanel" aria-expanded="false" aria-label="Buka menu data">
+            <span class="burger-mark" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <button class="button logout-button" id="logoutButton" type="button" title="Keluar dari workspace" aria-label="Keluar dari workspace">
+            <svg class="logout-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M10 6H6v12h4" />
+              <path d="M14 8l4 4-4 4" />
+              <path d="M8 12h10" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <aside class="tools-panel" id="toolsPanel" aria-hidden="true">
+        <div class="tools-panel-card" role="dialog" aria-label="Menu data">
+          <div class="tools-panel-heading">
+            <div>
+              <p class="eyebrow">Menu data</p>
+              <h2>Aksi & Tampilan</h2>
+            </div>
+            <button class="icon-button drawer-close-button" id="closeToolsPanelButton" type="button" aria-label="Tutup menu data">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M6 6l12 12" />
+                <path d="M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="tools-panel-actions">
           <label class="button secondary file-button" title="Import transaksi dari Excel atau CSV backup">
             <span aria-hidden="true">IMP</span>
             Import File
@@ -55,15 +87,9 @@
           <button class="button theme-toggle" id="themeToggle" type="button" title="Ganti mode terang/gelap">
             Dark Mode
           </button>
-          <button class="button logout-button" id="logoutButton" type="button" title="Keluar dari workspace" aria-label="Keluar dari workspace">
-            <svg class="logout-icon" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M10 6H6v12h4" />
-              <path d="M14 8l4 4-4 4" />
-              <path d="M8 12h10" />
-            </svg>
-          </button>
+          </div>
         </div>
-      </header>
+      </aside>
 
       <section class="period-toolbar" aria-label="Filter periode laporan">
         <div>
@@ -81,16 +107,54 @@
 
       <section class="summary-grid" aria-label="Ringkasan keuangan">
         <article class="metric-card income">
-          <p>Total Pemasukan</p>
+          <div class="metric-card-top">
+            <p>Total Pemasukan</p>
+            <span class="metric-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="6" width="18" height="12" rx="3" />
+                <path d="M7 10.5h2.2" />
+                <path d="M14.8 13.5H17" />
+                <circle cx="12" cy="12" r="2.8" />
+              </svg>
+            </span>
+          </div>
           <strong id="incomeTotal">Rp0</strong>
+          <span class="metric-rail" aria-hidden="true"></span>
         </article>
         <article class="metric-card expense">
-          <p>Total Pengeluaran</p>
+          <div class="metric-card-top">
+            <p>Total Pengeluaran</p>
+            <span class="metric-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="5" y="7" width="13" height="10" rx="2.5" />
+                <path d="M3 10h4" />
+                <path d="M2 14h5" />
+                <path d="M17.5 6.5 21 4v4.5" />
+                <path d="M14.5 11.5h4.8" />
+                <circle cx="11.5" cy="12" r="2" />
+              </svg>
+            </span>
+          </div>
           <strong id="expenseTotal">Rp0</strong>
+          <span class="metric-rail" aria-hidden="true"></span>
         </article>
         <article class="metric-card balance">
-          <p>Saldo Bersih</p>
+          <div class="metric-card-top">
+            <p>Saldo Bersih</p>
+            <span class="metric-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 10h16" />
+                <path d="M5 10 12 5l7 5" />
+                <path d="M7 10v7" />
+                <path d="M12 10v7" />
+                <path d="M17 10v7" />
+                <path d="M5 17h14" />
+                <path d="M4 20h16" />
+              </svg>
+            </span>
+          </div>
           <strong id="balanceTotal">Rp0</strong>
+          <span class="metric-rail" aria-hidden="true"></span>
         </article>
       </section>
 
@@ -315,6 +379,6 @@
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260627-netlifydb-native"></script>
+    <script src="app.js?v=20260708-kpi-refine"></script>
   </body>
 </html>
