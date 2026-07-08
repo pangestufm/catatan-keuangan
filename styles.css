@@ -4050,15 +4050,16 @@ body.detail-open .detail-close-button {
 }
 
 .category-number-row {
-  min-height: 132px;
+  min-height: 144px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "name"
     "values"
-    "breakdown";
+    "breakdown"
+    "rail";
   align-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 14px;
   overflow: hidden;
   border-color: rgba(148, 163, 184, 0.18);
@@ -4072,7 +4073,7 @@ body.detail-open .detail-close-button {
 
 .category-number-row::after {
   content: "";
-  grid-area: breakdown;
+  grid-area: rail;
   align-self: end;
   width: var(--activity-share, 38%);
   min-width: 44px;
@@ -4111,7 +4112,8 @@ body.detail-open .detail-close-button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  min-height: 25px;
+  min-height: 24px;
+  align-content: flex-start;
 }
 
 .category-breakdown span {
