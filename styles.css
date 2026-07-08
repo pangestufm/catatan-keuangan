@@ -4013,6 +4013,137 @@ body.detail-open .detail-close-button {
   }
 }
 
+/* Compact insight layout: keep category tiles and daily trend inside the same dashboard grid. */
+.category-panel {
+  grid-template-columns: minmax(360px, 0.92fr) minmax(560px, 1.58fr);
+  grid-template-areas:
+    "heading trend"
+    "filter trend"
+    "stats trend"
+    "bars daily";
+  align-items: start;
+}
+
+.category-panel .trend-card:first-of-type {
+  grid-area: trend;
+  width: 100%;
+  min-height: 360px;
+}
+
+.daily-expense-card {
+  grid-area: daily;
+  width: 100%;
+  min-height: 360px;
+  margin: 0;
+  border-left: 0;
+  border-top: 1px solid var(--sintesa-border);
+}
+
+.bar-list {
+  grid-area: bars;
+  align-self: start;
+}
+
+.category-number-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.category-number-row {
+  min-height: 132px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "name"
+    "values"
+    "breakdown";
+  align-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  overflow: hidden;
+  border-color: rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+    linear-gradient(135deg, color-mix(in srgb, currentColor 8%, transparent), transparent 62%),
+    rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.category-number-row::after {
+  content: "";
+  grid-area: breakdown;
+  align-self: end;
+  width: var(--activity-share, 38%);
+  min-width: 44px;
+  max-width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.58;
+}
+
+.category-name {
+  max-width: 100%;
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  font-weight: 820;
+  white-space: normal;
+}
+
+.category-values {
+  text-align: left;
+}
+
+.category-values strong {
+  font-size: clamp(1rem, 1.2vw, 1.2rem);
+  line-height: 1.12;
+  font-variant-numeric: tabular-nums;
+}
+
+.category-values small {
+  margin-top: 4px;
+  font-size: 0.7rem;
+}
+
+.category-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 25px;
+}
+
+.category-breakdown span {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 0.64rem;
+  line-height: 1;
+}
+
+@media (max-width: 1120px) {
+  .category-panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "heading"
+      "filter"
+      "stats"
+      "bars"
+      "trend"
+      "daily";
+  }
+
+  .category-number-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .category-number-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 560px) {
   .chat-actions {
     grid-template-columns: 1fr;

@@ -1307,7 +1307,7 @@ function renderCategoryBars(selectedCategory) {
       ${categoryRows.map((row) => {
         const percent = Math.round((row.activity / total) * 100);
         return `
-          <button class="category-number-row interactive-row" type="button" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
+          <button class="category-number-row interactive-row" type="button" style="--activity-share: ${Math.max(percent, 8)}%;" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
             <span class="category-name">${escapeHtml(row.category)}</span>
             <span class="category-values">
               <strong>${formatCurrency(row.activity)}</strong>

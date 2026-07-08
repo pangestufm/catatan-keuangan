@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Catatan Keuangan</title>
-    <link rel="stylesheet" href="styles.css?v=20260708-sintesa-layout" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f1220'/%3E%3Cpath d='M16 18h32v28H16z' fill='%23f5b82e'/%3E%3Cpath d='M24 18v28M40 18v28M16 29h32M16 37h32' stroke='%230f1220' stroke-width='4'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css?v=20260708-compact-insights" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -403,17 +404,16 @@
           <div id="trendChart"></div>
         </section>
 
-      </section>
-
-      <section class="trend-card daily-expense-card" aria-label="Grafik pengeluaran harian">
-        <div class="trend-heading">
-          <div>
-            <p class="eyebrow">Day-to-day</p>
-            <h3>Pengeluaran Harian</h3>
+        <section class="trend-card daily-expense-card" aria-label="Grafik pengeluaran harian">
+          <div class="trend-heading">
+            <div>
+              <p class="eyebrow">Day-to-day</p>
+              <h3>Pengeluaran Harian</h3>
+            </div>
+            <span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span>
           </div>
-          <span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span>
-        </div>
-        <div id="dailyExpenseChart"></div>
+          <div id="dailyExpenseChart"></div>
+        </section>
       </section>
 
       <p class="status-banner hidden" id="importStatus"></p>
@@ -468,6 +468,6 @@
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260708-sintesa-layout"></script>
+    <script src="app.js?v=20260708-compact-insights"></script>
   </body>
 </html>
