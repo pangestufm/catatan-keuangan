@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Catatan Keuangan</title>
-    <link rel="stylesheet" href="styles.css?v=20260708-trend-history" />
+    <link rel="stylesheet" href="styles.css?v=20260708-category-tiles" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -279,22 +279,70 @@
           </select>
         </label>
 
-        <div class="category-stat-grid">
-          <div class="interactive-card">
-            <span>Pemasukan</span>
+        <div class="category-stat-grid" aria-label="Ringkasan kategori terpilih">
+          <div class="interactive-card category-stat-tile income-tile">
+            <div class="category-stat-top">
+              <span>Pemasukan</span>
+              <i class="category-stat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 7h16v10H4z" />
+                  <path d="M7 11h2" />
+                  <path d="M15 13h2" />
+                  <circle cx="12" cy="12" r="2.5" />
+                </svg>
+              </i>
+            </div>
             <strong id="categoryIncome">Rp0</strong>
+            <b class="category-stat-rail" aria-hidden="true"></b>
           </div>
-          <div class="interactive-card">
-            <span>Pengeluaran</span>
+          <div class="interactive-card category-stat-tile expense-tile">
+            <div class="category-stat-top">
+              <span>Pengeluaran</span>
+              <i class="category-stat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M6 8h12v9H6z" />
+                  <path d="M3 11h4" />
+                  <path d="M4 15h3" />
+                  <circle cx="12" cy="12.5" r="2" />
+                </svg>
+              </i>
+            </div>
             <strong id="categoryExpense">Rp0</strong>
+            <b class="category-stat-rail" aria-hidden="true"></b>
           </div>
-          <div class="interactive-card">
-            <span>Saldo</span>
+          <div class="interactive-card category-stat-tile balance-tile">
+            <div class="category-stat-top">
+              <span>Saldo</span>
+              <i class="category-stat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 10h14" />
+                  <path d="M6 10 12 6l6 4" />
+                  <path d="M8 10v6" />
+                  <path d="M12 10v6" />
+                  <path d="M16 10v6" />
+                  <path d="M6 18h12" />
+                </svg>
+              </i>
+            </div>
             <strong id="categoryBalance">Rp0</strong>
+            <b class="category-stat-rail" aria-hidden="true"></b>
           </div>
-          <div class="interactive-card">
-            <span>Transaksi</span>
+          <div class="interactive-card category-stat-tile count-tile">
+            <div class="category-stat-top">
+              <span>Transaksi</span>
+              <i class="category-stat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M7 6h11" />
+                  <path d="M7 12h11" />
+                  <path d="M7 18h11" />
+                  <path d="M4 6h.01" />
+                  <path d="M4 12h.01" />
+                  <path d="M4 18h.01" />
+                </svg>
+              </i>
+            </div>
             <strong id="categoryCount">0</strong>
+            <b class="category-stat-rail" aria-hidden="true"></b>
           </div>
         </div>
 
@@ -379,6 +427,6 @@
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260708-trend-history"></script>
+    <script src="app.js?v=20260708-category-tiles"></script>
   </body>
 </html>
