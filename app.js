@@ -1348,7 +1348,7 @@ function handleTrendModeChange(event) {
 }
 
 function renderTrendChart(selectedCategory) {
-  const monthTransactions = getMonthFilteredTransactions();
+  const monthTransactions = getTrendSourceTransactions();
   const source = selectedCategory === "all"
     ? monthTransactions
     : monthTransactions.filter((item) => item.category === selectedCategory);
@@ -1420,6 +1420,10 @@ function renderTrendChart(selectedCategory) {
       <span><i class="legend-dot expense-dot"></i>Pengeluaran</span>
     </div>
   `;
+}
+
+function getTrendSourceTransactions() {
+  return state.transactions;
 }
 
 function renderDailyExpenseChart(selectedCategory) {
