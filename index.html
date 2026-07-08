@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Catatan Keuangan</title>
-    <link rel="stylesheet" href="styles.css?v=20260708-category-tiles" />
+    <link rel="stylesheet" href="styles.css?v=20260708-sintesa-layout" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -31,9 +31,26 @@
 
     <main class="app-shell hidden" id="appShell">
       <header class="topbar">
-        <div>
-          <h1>Catatan Keuangan</h1>
-          <p class="storage-status" id="storageStatus">Mode Lokal</p>
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>Catatan Keuangan</h1>
+            <p class="storage-status" id="storageStatus">Mode Lokal</p>
+          </div>
+        </div>
+        <label class="global-search" aria-label="Cari transaksi">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="m21 21-4.2-4.2" />
+            <circle cx="11" cy="11" r="7" />
+          </svg>
+          <input id="globalSearchInput" type="search" placeholder="Cari transaksi, kategori, atau deskripsi..." />
+        </label>
+        <div class="topbar-profile">
+          <span class="profile-avatar" aria-hidden="true">CK</span>
+          <div>
+            <strong>Workspace</strong>
+            <small id="workspaceBadge">Lokal</small>
+          </div>
         </div>
         <div class="topbar-actions" aria-label="Aksi cepat">
           <button class="button secondary tools-toggle" id="toolsPanelButton" type="button" aria-controls="toolsPanel" aria-expanded="false" aria-label="Buka menu data">
@@ -52,6 +69,29 @@
           </button>
         </div>
       </header>
+
+      <nav class="main-nav" aria-label="Navigasi dashboard">
+        <a href="#appShell">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></svg>
+          Dashboard
+        </a>
+        <a href="#quickEntryModal" id="navQuickEntryButton">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+          Catat
+        </a>
+        <a href="#categoryPanel">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h10" /><path d="M4 17h7" /></svg>
+          Kategori
+        </a>
+        <a href="#trendSection">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18 9 12l4 3 7-9" /></svg>
+          Tren
+        </a>
+        <a href="#transactionsSection">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 5h12" /><path d="M6 12h12" /><path d="M6 19h12" /></svg>
+          Transaksi
+        </a>
+      </nav>
 
       <aside class="tools-panel" id="toolsPanel" aria-hidden="true">
         <div class="tools-panel-card" role="dialog" aria-label="Menu data">
@@ -264,7 +304,7 @@
         </div>
       </section>
 
-      <section class="panel category-panel">
+      <section class="panel category-panel" id="categoryPanel">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Kategori</p>
@@ -348,7 +388,7 @@
 
         <div class="bar-list" id="categoryBars" aria-label="Rincian per kategori"></div>
 
-        <section class="trend-card" aria-label="Grafik pergerakan transaksi">
+        <section class="trend-card" id="trendSection" aria-label="Grafik pergerakan transaksi">
           <div class="trend-heading">
             <div>
               <p class="eyebrow">Pergerakan</p>
@@ -363,21 +403,22 @@
           <div id="trendChart"></div>
         </section>
 
-        <section class="trend-card daily-expense-card" aria-label="Grafik pengeluaran harian">
-          <div class="trend-heading">
-            <div>
-              <p class="eyebrow">Day-to-day</p>
-              <h3>Pengeluaran Harian</h3>
-            </div>
-            <span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span>
+      </section>
+
+      <section class="trend-card daily-expense-card" aria-label="Grafik pengeluaran harian">
+        <div class="trend-heading">
+          <div>
+            <p class="eyebrow">Day-to-day</p>
+            <h3>Pengeluaran Harian</h3>
           </div>
-          <div id="dailyExpenseChart"></div>
-        </section>
+          <span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span>
+        </div>
+        <div id="dailyExpenseChart"></div>
       </section>
 
       <p class="status-banner hidden" id="importStatus"></p>
 
-      <section class="panel table-section">
+      <section class="panel table-section" id="transactionsSection">
         <div class="panel-heading table-heading">
           <div>
             <p class="eyebrow">Detail</p>
@@ -427,6 +468,6 @@
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260708-category-tiles"></script>
+    <script src="app.js?v=20260708-sintesa-layout"></script>
   </body>
 </html>

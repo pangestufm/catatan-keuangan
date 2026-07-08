@@ -79,6 +79,7 @@ const state = {
   filters: {
     month: "",
     date: "",
+    search: "",
   },
 };
 
@@ -108,6 +109,9 @@ const elements = {
   dailyExpenseChart: document.querySelector("#dailyExpenseChart"),
   dailyExpenseMonthLabel: document.querySelector("#dailyExpenseMonthLabel"),
   monthFilterInput: document.querySelector("#monthFilterInput"),
+  globalSearchInput: document.querySelector("#globalSearchInput"),
+  workspaceBadge: document.querySelector("#workspaceBadge"),
+  navQuickEntryButton: document.querySelector("#navQuickEntryButton"),
   showAllMonthsButton: document.querySelector("#showAllMonthsButton"),
   filterDate: document.querySelector("#filterDate"),
   clearDateFilterButton: document.querySelector("#clearDateFilterButton"),
@@ -185,6 +189,8 @@ function bindEvents() {
   elements.form.addEventListener("submit", handleSubmit);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.monthFilterInput.addEventListener("change", handleMonthFilterChange);
+  elements.globalSearchInput.addEventListener("input", handleGlobalSearchChange);
+  elements.navQuickEntryButton.addEventListener("click", openQuickEntryFromNav);
   elements.showAllMonthsButton.addEventListener("click", showAllMonths);
   elements.filterDate.addEventListener("change", (event) => {
     state.filters.date = event.target.value;
@@ -306,11 +312,19 @@ function logout() {
 }
 
 function openQuickEntryModal() {
+  closeToolsPanel(false);
+  document.body.classList.add("quick-entry-open");
   elements.quickEntryModal.classList.remove("hidden");
   elements.chatInput.focus();
 }
 
+function openQuickEntryFromNav(event) {
+  event.preventDefault();
+  openQuickEntryModal();
+}
+
 function closeQuickEntryModal() {
+  document.body.classList.remove("quick-entry-open");
   elements.quickEntryModal.classList.add("hidden");
 }
 
@@ -321,6 +335,8 @@ function closeQuickEntryFromBackdrop(event) {
 }
 
 function openToolsPanel() {
+  closeQuickEntryModal();
+  document.body.classList.add("tools-open");
   elements.toolsPanel.classList.add("is-open");
   elements.toolsPanel.setAttribute("aria-hidden", "false");
   elements.toolsPanelButton.setAttribute("aria-expanded", "true");
@@ -336,6 +352,7 @@ function toggleToolsPanel() {
 }
 
 function closeToolsPanel(shouldRestoreFocus = false) {
+  document.body.classList.remove("tools-open");
   elements.toolsPanel.classList.remove("is-open");
   elements.toolsPanel.setAttribute("aria-hidden", "true");
   elements.toolsPanelButton.setAttribute("aria-expanded", "false");
@@ -1637,7 +1654,19 @@ function renderTable() {
 function getFilteredTransactions() {
   return getMonthFilteredTransactions()
     .filter((item) => {
-      return !state.filters.date || item.date === state.filters.date;
+      if (state.filters.date && item.date !== state.filters.date) return false;
+      if (!state.filters.search) return true;
+
+      const haystack = [
+        item.date,
+        item.type === "income" ? "pemasukan income masuk" : "pengeluaran expense keluar",
+        item.category,
+        item.description,
+        String(item.amount),
+        formatCurrency(item.amount),
+      ].join(" ").toLowerCase();
+
+      return haystack.includes(state.filters.search);
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
@@ -1680,6 +1709,11 @@ function handleMonthFilterChange(event) {
     elements.filterDate.value = "";
   }
   render();
+}
+
+function handleGlobalSearchChange(event) {
+  state.filters.search = cleanText(event.target.value).toLowerCase();
+  renderTable();
 }
 
 function showAllMonths() {
@@ -2145,6 +2179,9 @@ function updateStorageStatus(label, title) {
   elements.storageStatus.textContent = label;
   elements.storageStatus.title = title || label;
   elements.storageStatus.dataset.mode = state.storageMode;
+  if (elements.workspaceBadge) {
+    elements.workspaceBadge.textContent = state.workspaceId || "Lokal";
+  }
 }
 
 function sanitizeWorkspaceId(value) {
