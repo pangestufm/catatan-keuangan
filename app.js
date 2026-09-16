@@ -6,6 +6,8 @@ const AUTH_KEY = "catatan-keuangan-auth";
 const LEARNING_PREFIX = "catatan-keuangan-learning";
 const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
 const PARSE_API_URLS = ["/.netlify/functions/parse-transaction"];
+const BANK_STATEMENT_API_URL = "/.netlify/functions/parse-bank-statement";
+const BANK_STATEMENT_MAX_FILE_SIZE = 3.5 * 1024 * 1024;
 const DEFAULT_CATEGORIES = [
   "Gaji",
   "Bonus",
@@ -73,6 +75,8 @@ const state = {
   isLocalOnly: false,
   lastOnlineError: "",
   pendingDraft: null,
+  bankImportDrafts: [],
+  bankImportFileName: "",
   isSyncing: false,
   syncTimer: null,
   trendMode: "monthly",
@@ -122,6 +126,18 @@ const elements = {
   clearButton: document.querySelector("#clearButton"),
   importExcelInput: document.querySelector("#importExcelInput"),
   importStatus: document.querySelector("#importStatus"),
+  bankStatementInput: document.querySelector("#bankStatementInput"),
+  bankImportModal: document.querySelector("#bankImportModal"),
+  bankImportFileName: document.querySelector("#bankImportFileName"),
+  bankImportStatus: document.querySelector("#bankImportStatus"),
+  bankImportRows: document.querySelector("#bankImportRows"),
+  bankImportSelectedCount: document.querySelector("#bankImportSelectedCount"),
+  bankImportIncomeTotal: document.querySelector("#bankImportIncomeTotal"),
+  bankImportExpenseTotal: document.querySelector("#bankImportExpenseTotal"),
+  bankImportSelectAll: document.querySelector("#bankImportSelectAll"),
+  closeBankImportButton: document.querySelector("#closeBankImportButton"),
+  cancelBankImportButton: document.querySelector("#cancelBankImportButton"),
+  saveBankImportButton: document.querySelector("#saveBankImportButton"),
   chatForm: document.querySelector("#chatForm"),
   chatInput: document.querySelector("#chatInput"),
   chatStatus: document.querySelector("#chatStatus"),
@@ -208,6 +224,14 @@ function bindEvents() {
   elements.exportExcelButton.addEventListener("click", exportExcel);
   elements.clearButton.addEventListener("click", clearAllData);
   elements.importExcelInput.addEventListener("change", importExcelFile);
+  elements.bankStatementInput.addEventListener("change", importBankStatementFile);
+  elements.bankImportRows.addEventListener("input", handleBankImportDraftChange);
+  elements.bankImportRows.addEventListener("change", handleBankImportDraftChange);
+  elements.bankImportSelectAll.addEventListener("change", toggleAllBankImportDrafts);
+  elements.closeBankImportButton.addEventListener("click", closeBankImportModal);
+  elements.cancelBankImportButton.addEventListener("click", closeBankImportModal);
+  elements.saveBankImportButton.addEventListener("click", saveBankImportDrafts);
+  elements.bankImportModal.addEventListener("click", closeBankImportFromBackdrop);
   elements.chatForm.addEventListener("submit", handleChatSubmit);
   elements.voiceButton.addEventListener("click", startVoiceInput);
   elements.confirmDraftButton.addEventListener("click", confirmDraftTransaction);
@@ -336,6 +360,7 @@ function closeQuickEntryFromBackdrop(event) {
 
 function openToolsPanel() {
   closeQuickEntryModal();
+  closeBankImportModal();
   document.body.classList.add("tools-open");
   elements.toolsPanel.classList.add("is-open");
   elements.toolsPanel.setAttribute("aria-hidden", "false");
@@ -371,6 +396,7 @@ function closePanelsWithEscape(event) {
   if (event.key !== "Escape") return;
   closeToolsPanel(true);
   closeQuickEntryModal();
+  closeBankImportModal();
   closeDetailTransactions();
 }
 
@@ -570,7 +596,9 @@ function normalizeTransaction(transaction) {
     description: transaction.description || "-",
     amount: Number(transaction.amount),
     source: transaction.source || "Online",
+    bankReference: transaction.bankReference || "",
     createdAt: transaction.createdAt || new Date().toISOString(),
+    updatedAt: transaction.updatedAt || "",
   };
 }
 
@@ -673,6 +701,392 @@ async function importExcelFile(event) {
   }
 }
 
+async function importBankStatementFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  closeToolsPanel(false);
+  state.bankImportDrafts = [];
+  state.bankImportFileName = file.name;
+  openBankImportModal();
+  renderBankImportDrafts();
+
+  if (file.size > BANK_STATEMENT_MAX_FILE_SIZE) {
+    showBankImportStatus("Ukuran file maksimal 3,5 MB agar aman diproses melalui Netlify.", "error");
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    elements.bankImportModal.setAttribute("aria-busy", "true");
+    elements.saveBankImportButton.disabled = true;
+    showBankImportStatus(`Agent sedang membaca ${file.name}. Proses ini bisa memerlukan beberapa detik...`, "info");
+
+    const documentPayload = await buildBankStatementDocumentPayload(file);
+    const result = await requestBankStatementAgent({
+      ...documentPayload,
+      fileName: file.name,
+      categories: getCategories(),
+      categoryMemory: summarizeCategoryMemory(),
+      recentTransactions: state.transactions.slice(0, 50).map((item) => ({
+        date: item.date,
+        type: item.type,
+        category: item.category,
+        description: item.description,
+        amount: item.amount,
+      })),
+      today: getTodayInputValue(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Jakarta",
+    });
+
+    const extractedTransactions = (result.transactions || []).map((transaction) => ({
+      date: transaction.date,
+      type: transaction.type === "income" ? "income" : "expense",
+      category: transaction.category || "Lainnya",
+      description: transaction.description || "Transaksi bank",
+      amount: Math.round(Number(transaction.amount) || 0),
+      reference: transaction.reference || "",
+      confidence: Number(transaction.confidence) || 0,
+      reason: transaction.reason || "",
+    })).filter((transaction) => transaction.date && transaction.amount > 0);
+
+    if (!window.BankReconciliation?.reconcileBankTransactions) {
+      throw new Error("Modul pengecekan duplikat belum termuat. Muat ulang halaman lalu coba lagi.");
+    }
+    state.bankImportDrafts = window.BankReconciliation.reconcileBankTransactions(
+      extractedTransactions,
+      state.transactions,
+    );
+
+    renderBankImportDrafts();
+    if (!state.bankImportDrafts.length) {
+      showBankImportStatus("Agent tidak menemukan transaksi yang dapat diimpor pada dokumen ini.", "error");
+      return;
+    }
+
+    const institution = cleanText(result.statement?.institution);
+    const period = cleanText(result.statement?.period);
+    const contextLabel = [institution, period].filter(Boolean).join(" · ");
+    const counts = getBankImportReconciliationCounts();
+    showBankImportStatus(
+      `${state.bankImportDrafts.length} transaksi ditemukan${contextLabel ? ` dari ${contextLabel}` : ""}: ${counts.new} baru, ${counts.duplicate} sudah ada, ${counts.changed} berubah. Periksa sebelum menyimpan.`,
+      "success",
+    );
+  } catch (error) {
+    console.error(error);
+    showBankImportStatus(error.message || "Dokumen gagal dibaca oleh agent.", "error");
+  } finally {
+    elements.bankImportModal.removeAttribute("aria-busy");
+    updateBankImportSummary();
+    event.target.value = "";
+  }
+}
+
+async function buildBankStatementDocumentPayload(file) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+  if (extension === "csv") {
+    return {
+      documentText: (await file.text()).slice(0, 250000),
+      mimeType: "text/csv",
+    };
+  }
+
+  if (["xlsx", "xls"].includes(extension)) {
+    if (!window.XLSX) {
+      throw new Error("Parser Excel belum termuat. Muat ulang halaman lalu coba lagi.");
+    }
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+    const documentText = workbook.SheetNames.map((sheetName) => {
+      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { blankrows: false });
+      return `=== Sheet: ${sheetName} ===\n${csv}`;
+    }).join("\n\n").slice(0, 250000);
+    return { documentText, mimeType: "text/csv" };
+  }
+
+  const supportedMimeTypes = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+  ]);
+  const mimeType = file.type || getBankStatementMimeType(extension);
+  if (!supportedMimeTypes.has(mimeType)) {
+    throw new Error("Format belum didukung. Gunakan PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX.");
+  }
+
+  return {
+    documentBase64: await fileToBase64(file),
+    mimeType,
+  };
+}
+
+function getBankStatementMimeType(extension) {
+  const mimeTypes = {
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+  };
+  return mimeTypes[extension] || "application/octet-stream";
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = () => reject(new Error("File tidak dapat dibaca oleh browser."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function requestBankStatementAgent(payload) {
+  if (window.location.protocol === "file:") {
+    throw new Error("Fitur agent mutasi bank memerlukan versi online Netlify.");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 90000);
+
+  try {
+    const response = await fetch(BANK_STATEMENT_API_URL, {
+      method: "POST",
+      headers: createApiHeaders(payload),
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const details = await readApiError(response);
+      throw new Error(details || `Agent mutasi bank gagal (${response.status}).`);
+    }
+
+    const data = await response.json();
+    if (!data || !Array.isArray(data.transactions)) {
+      throw new Error("Respons agent mutasi bank tidak valid.");
+    }
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Waktu pemrosesan habis. Coba file yang lebih kecil atau lebih sedikit halaman.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function openBankImportModal() {
+  closeQuickEntryModal();
+  closeToolsPanel(false);
+  document.body.classList.add("bank-import-open");
+  elements.bankImportModal.classList.remove("hidden");
+  elements.bankImportFileName.textContent = state.bankImportFileName || "Dokumen mutasi bank";
+}
+
+function closeBankImportModal() {
+  document.body.classList.remove("bank-import-open");
+  elements.bankImportModal.classList.add("hidden");
+}
+
+function closeBankImportFromBackdrop(event) {
+  if (event.target === elements.bankImportModal && !elements.bankImportModal.hasAttribute("aria-busy")) {
+    closeBankImportModal();
+  }
+}
+
+function renderBankImportDrafts() {
+  if (!state.bankImportDrafts.length) {
+    elements.bankImportRows.innerHTML = `<tr><td colspan="8" class="bank-import-empty">Belum ada hasil transaksi.</td></tr>`;
+    updateBankImportSummary();
+    return;
+  }
+
+  elements.bankImportRows.innerHTML = state.bankImportDrafts.map((draft, index) => {
+    const confidence = Math.max(0, Math.min(1, Number(draft.confidence) || 0));
+    const confidenceLabel = confidence >= 0.85 ? "Tinggi" : confidence >= 0.65 ? "Sedang" : "Perlu cek";
+    const confidenceClass = confidence >= 0.85 ? "high" : confidence >= 0.65 ? "medium" : "low";
+    const status = draft.reconciliationStatus || "new";
+    const statusLabel = status === "duplicate" ? "Sudah ada" : status === "changed" ? "Berubah" : "Baru";
+    const duplicateDisabled = status === "duplicate" ? "disabled" : "";
+    return `
+      <tr class="bank-row-${status}" data-bank-index="${index}">
+        <td class="bank-select-column" data-label="Gunakan">
+          <input class="bank-row-select" type="checkbox" data-field="selected" ${draft.selected ? "checked" : ""} ${duplicateDisabled} aria-label="Pilih transaksi ${index + 1}" />
+        </td>
+        <td data-label="Tanggal"><input class="bank-date-input" type="date" data-field="date" value="${escapeHtml(draft.date)}" aria-label="Tanggal transaksi ${index + 1}" /></td>
+        <td data-label="Jenis">
+          <select data-field="type" aria-label="Jenis transaksi ${index + 1}">
+            <option value="income" ${draft.type === "income" ? "selected" : ""}>Pemasukan</option>
+            <option value="expense" ${draft.type === "expense" ? "selected" : ""}>Pengeluaran</option>
+          </select>
+        </td>
+        <td data-label="Kategori"><input type="text" data-field="category" value="${escapeHtml(draft.category)}" list="categoryList" aria-label="Kategori transaksi ${index + 1}" /></td>
+        <td data-label="Keterangan"><input class="bank-description-input" type="text" data-field="description" value="${escapeHtml(draft.description)}" aria-label="Keterangan transaksi ${index + 1}" /></td>
+        <td data-label="Nominal"><input class="bank-amount-input" type="number" data-field="amount" value="${Number(draft.amount) || 0}" min="0" step="100" aria-label="Nominal transaksi ${index + 1}" /></td>
+        <td data-label="Status"><span class="reconciliation-badge ${status}" title="${escapeHtml(draft.reconciliationNote || statusLabel)}">${statusLabel}</span></td>
+        <td data-label="Keyakinan"><span class="confidence-badge ${confidenceClass}" title="${escapeHtml(draft.reason || "Keyakinan klasifikasi agent")}">${confidenceLabel}</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  updateBankImportSummary();
+}
+
+function handleBankImportDraftChange(event) {
+  const field = event.target.dataset.field;
+  const row = event.target.closest("[data-bank-index]");
+  if (!field || !row) return;
+
+  const draft = state.bankImportDrafts[Number(row.dataset.bankIndex)];
+  if (!draft) return;
+
+  if (field === "selected") {
+    draft.selected = event.target.checked;
+  } else if (field === "amount") {
+    draft.amount = Math.max(0, Math.round(Number(event.target.value) || 0));
+  } else {
+    draft[field] = cleanText(event.target.value);
+  }
+  updateBankImportSummary();
+}
+
+function toggleAllBankImportDrafts(event) {
+  const selected = event.target.checked;
+  state.bankImportDrafts.forEach((draft) => {
+    draft.selected = draft.reconciliationStatus === "duplicate" ? false : selected;
+  });
+  elements.bankImportRows.querySelectorAll(".bank-row-select").forEach((checkbox) => {
+    checkbox.checked = checkbox.disabled ? false : selected;
+  });
+  updateBankImportSummary();
+}
+
+function updateBankImportSummary() {
+  const selectedDrafts = state.bankImportDrafts.filter((draft) => draft.selected);
+  const eligibleDrafts = state.bankImportDrafts.filter((draft) => draft.reconciliationStatus !== "duplicate");
+  const totals = calculateTotals(selectedDrafts);
+  elements.bankImportSelectedCount.textContent = String(selectedDrafts.length);
+  elements.bankImportIncomeTotal.textContent = formatCurrency(totals.income);
+  elements.bankImportExpenseTotal.textContent = formatCurrency(totals.expense);
+  elements.bankImportSelectAll.checked = Boolean(eligibleDrafts.length) && selectedDrafts.length === eligibleDrafts.length;
+  elements.bankImportSelectAll.indeterminate = selectedDrafts.length > 0 && selectedDrafts.length < eligibleDrafts.length;
+  elements.saveBankImportButton.disabled = !selectedDrafts.length || elements.bankImportModal.hasAttribute("aria-busy");
+}
+
+function saveBankImportDrafts() {
+  const selectedDrafts = state.bankImportDrafts.filter((draft) => (
+    draft.selected && draft.reconciliationStatus !== "duplicate"
+  ));
+  if (!selectedDrafts.length) {
+    showBankImportStatus("Pilih minimal satu transaksi untuk disimpan.", "error");
+    return;
+  }
+
+  const invalidDraft = selectedDrafts.find((draft) => (
+    !/^\d{4}-\d{2}-\d{2}$/.test(draft.date)
+    || !["income", "expense"].includes(draft.type)
+    || !cleanText(draft.category)
+    || !cleanText(draft.description)
+    || Number(draft.amount) <= 0
+  ));
+  if (invalidDraft) {
+    showBankImportStatus("Masih ada transaksi terpilih yang datanya belum lengkap atau nominalnya nol.", "error");
+    return;
+  }
+
+  const source = `Mutasi Bank AI · ${state.bankImportFileName}`;
+  const existingFingerprints = new Set(state.transactions.map(window.BankReconciliation.createFingerprint));
+  const existingReferences = new Set(state.transactions
+    .map((item) => window.BankReconciliation.normalizeReference(item.bankReference))
+    .filter(Boolean));
+  const newTransactions = [];
+  const updatedTransactions = [];
+  let skippedCount = 0;
+
+  selectedDrafts.forEach((draft) => {
+    if (draft.reconciliationStatus === "changed" && draft.existingTransactionId) {
+      const existingIndex = state.transactions.findIndex((item) => item.id === draft.existingTransactionId);
+      if (existingIndex >= 0) {
+        const existing = state.transactions[existingIndex];
+        const updated = normalizeTransaction({
+          ...existing,
+          date: draft.date,
+          type: draft.type,
+          category: draft.category,
+          description: draft.description,
+          amount: Number(draft.amount),
+          source,
+          bankReference: draft.reference || existing.bankReference || "",
+          updatedAt: new Date().toISOString(),
+        });
+        existingFingerprints.delete(window.BankReconciliation.createFingerprint(existing));
+        existingFingerprints.add(window.BankReconciliation.createFingerprint(updated));
+        const updatedReference = window.BankReconciliation.normalizeReference(updated.bankReference);
+        if (updatedReference) existingReferences.add(updatedReference);
+        state.transactions[existingIndex] = updated;
+        updatedTransactions.push(updated);
+        return;
+      }
+    }
+
+    const transaction = createTransaction({
+      type: draft.type,
+      date: draft.date,
+      category: draft.category,
+      description: draft.description,
+      amount: Number(draft.amount),
+      source,
+      bankReference: draft.reference,
+    });
+    const fingerprint = window.BankReconciliation.createFingerprint(transaction);
+    const reference = window.BankReconciliation.normalizeReference(transaction.bankReference);
+    if (existingFingerprints.has(fingerprint) || (reference && existingReferences.has(reference))) {
+      skippedCount += 1;
+      return;
+    }
+    existingFingerprints.add(fingerprint);
+    if (reference) existingReferences.add(reference);
+    newTransactions.push(transaction);
+  });
+
+  if (!newTransactions.length && !updatedTransactions.length) {
+    showBankImportStatus("Semua transaksi terpilih sudah ada di aplikasi.", "info");
+    return;
+  }
+
+  state.transactions = [...newTransactions, ...state.transactions];
+  [...newTransactions, ...updatedTransactions].forEach((transaction) => (
+    rememberCategory(transaction.description, transaction.category)
+  ));
+  saveTransactions();
+  render();
+  closeBankImportModal();
+
+  const totals = calculateTotals([...newTransactions, ...updatedTransactions]);
+  showImportStatus(
+    `Mutasi bank tersimpan: ${newTransactions.length} transaksi baru, ${updatedTransactions.length} diperbarui${skippedCount ? `, ${skippedCount} duplikat dilewati` : ""}. Nilai terpilih ${formatCurrency(totals.income)} pemasukan dan ${formatCurrency(totals.expense)} pengeluaran.`,
+    "success",
+  );
+}
+
+function getBankImportReconciliationCounts() {
+  return state.bankImportDrafts.reduce((counts, draft) => {
+    const status = ["new", "duplicate", "changed"].includes(draft.reconciliationStatus)
+      ? draft.reconciliationStatus
+      : "new";
+    counts[status] += 1;
+    return counts;
+  }, { new: 0, duplicate: 0, changed: 0 });
+}
+
+function showBankImportStatus(message, type = "info") {
+  elements.bankImportStatus.textContent = message;
+  elements.bankImportStatus.dataset.type = type;
+}
+
 function parseWorkbookTransactions(workbook) {
   const transactions = [];
 
@@ -749,7 +1163,9 @@ function parseBackupTransactionRows(rows, sheetName) {
     description: header.indexOf("deskripsi"),
     amount: header.indexOf("nominal"),
     source: header.indexOf("sumber"),
+    bankReference: header.indexOf("referensi bank"),
     createdAt: header.indexOf("dibuat pada"),
+    updatedAt: header.indexOf("diperbarui pada"),
   };
 
   return rows.slice(headerRowIndex + 1).reduce((transactions, row, index) => {
@@ -768,12 +1184,15 @@ function parseBackupTransactionRows(rows, sheetName) {
       description,
       amount,
       source: cleanText(row[indexes.source]) || `Backup ${sheetName} baris ${rowNumber}`,
+      bankReference: indexes.bankReference >= 0 ? cleanText(row[indexes.bankReference]) : "",
     });
 
     const id = indexes.id >= 0 ? cleanText(row[indexes.id]) : "";
     const createdAt = indexes.createdAt >= 0 ? cleanText(row[indexes.createdAt]) : "";
+    const updatedAt = indexes.updatedAt >= 0 ? cleanText(row[indexes.updatedAt]) : "";
     if (id) transaction.id = id;
     if (createdAt) transaction.createdAt = createdAt;
+    if (updatedAt) transaction.updatedAt = updatedAt;
 
     transactions.push(transaction);
     return transactions;
@@ -1732,7 +2151,7 @@ function calculateTotals(transactions) {
   }, { income: 0, expense: 0, balance: 0 });
 }
 
-function createTransaction({ type, date, category, description, amount, source }) {
+function createTransaction({ type, date, category, description, amount, source, bankReference = "" }) {
   return {
     id: createId(),
     date,
@@ -1741,7 +2160,9 @@ function createTransaction({ type, date, category, description, amount, source }
     description,
     amount,
     source,
+    bankReference,
     createdAt: new Date().toISOString(),
+    updatedAt: "",
   };
 }
 
@@ -2031,12 +2452,14 @@ function buildExportRows() {
       item.description,
       item.amount,
       item.source || "Manual",
+      item.bankReference || "",
       item.createdAt || "",
+      item.updatedAt || "",
     ]);
 
   const totals = calculateTotals(state.transactions);
   return [
-    ["ID", "Tanggal", "Jenis", "Kategori", "Deskripsi", "Nominal", "Sumber", "Dibuat Pada"],
+    ["ID", "Tanggal", "Jenis", "Kategori", "Deskripsi", "Nominal", "Sumber", "Referensi Bank", "Dibuat Pada", "Diperbarui Pada"],
     ...transactionRows,
     [],
     ["Summary", "Pemasukan", "Pengeluaran", "Saldo Bersih"],

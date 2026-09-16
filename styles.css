@@ -3913,6 +3913,440 @@ body.quick-entry-open .detail-toggle-button {
   }
 }
 
+/* Bank statement review keeps AI extraction reversible until the user confirms it. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.tool-action-icon {
+  width: 34px;
+  min-width: 34px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--primary);
+}
+
+.tool-action-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body.bank-import-open {
+  overflow: hidden;
+}
+
+body.bank-import-open .quick-entry-button,
+body.bank-import-open .detail-toggle-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bank-import-backdrop {
+  z-index: 80;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 16, 0.42);
+  backdrop-filter: blur(14px) saturate(112%);
+}
+
+.bank-import-modal {
+  width: min(1180px, 100%);
+  height: min(820px, calc(100dvh - 48px));
+  min-height: 520px;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 20%),
+    color-mix(in srgb, var(--sintesa-card) 96%, var(--surface));
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.48);
+}
+
+.bank-import-heading {
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid var(--sintesa-border);
+}
+
+.bank-import-heading h2 {
+  font-size: 1.35rem;
+}
+
+.bank-import-file {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.bank-import-status {
+  margin: 14px 22px 0;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 9px 12px;
+}
+
+.bank-import-status[data-type="success"] {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--sintesa-border));
+  color: var(--green);
+}
+
+.bank-import-status[data-type="error"] {
+  border-color: color-mix(in srgb, var(--red) 44%, var(--sintesa-border));
+  color: var(--red);
+}
+
+.bank-import-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 22px;
+}
+
+.bank-import-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px 12px;
+}
+
+.bank-import-summary span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bank-import-summary strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-import-summary .income strong {
+  color: var(--green);
+}
+
+.bank-import-summary .expense strong {
+  color: var(--red);
+}
+
+.bank-import-table-wrap {
+  min-height: 0;
+  overflow: auto;
+  margin: 0 22px;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 12px;
+  background: rgba(5, 9, 18, 0.18);
+}
+
+.bank-import-table {
+  width: 100%;
+  min-width: 1140px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.bank-import-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.bank-import-table th {
+  background: color-mix(in srgb, var(--sintesa-card) 96%, var(--surface));
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.bank-import-table th,
+.bank-import-table td {
+  border-bottom: 1px solid var(--sintesa-border);
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+
+.bank-import-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.bank-import-table tbody tr:has(.bank-row-select:not(:checked)) input,
+.bank-import-table tbody tr:has(.bank-row-select:not(:checked)) select {
+  opacity: 0.66;
+}
+
+.bank-import-table tbody tr.bank-row-duplicate {
+  background: color-mix(in srgb, var(--muted) 5%, transparent);
+}
+
+.bank-import-table tbody tr.bank-row-changed {
+  background: color-mix(in srgb, var(--amber) 5%, transparent);
+}
+
+.bank-import-table input:not([type="checkbox"]),
+.bank-import-table select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+}
+
+.bank-import-table input[type="checkbox"],
+.bank-select-all input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.bank-select-column {
+  width: 42px;
+  text-align: center;
+}
+
+.bank-date-input {
+  min-width: 142px !important;
+}
+
+.bank-description-input {
+  min-width: 190px !important;
+}
+
+.bank-amount-input {
+  min-width: 132px !important;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.confidence-badge {
+  min-width: 70px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 999px;
+  padding: 6px 8px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.reconciliation-badge {
+  min-width: 78px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sintesa-border);
+  border-radius: 999px;
+  padding: 6px 8px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.reconciliation-badge.new {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 36%, var(--sintesa-border));
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.reconciliation-badge.duplicate {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+}
+
+.reconciliation-badge.changed {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 38%, var(--sintesa-border));
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+}
+
+.confidence-badge.high {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.confidence-badge.medium {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+}
+
+.confidence-badge.low {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.bank-import-empty {
+  height: 160px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.bank-import-footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--sintesa-border);
+  padding: 14px 22px 18px;
+}
+
+.bank-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.bank-import-privacy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.bank-import-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bank-import-actions .button {
+  min-height: 44px;
+}
+
+@media (max-width: 760px) {
+  .bank-import-backdrop {
+    padding: 8px;
+  }
+
+  .bank-import-modal {
+    height: calc(100dvh - 16px);
+    min-height: 0;
+    border-radius: 16px;
+  }
+
+  .bank-import-heading {
+    padding: 16px 14px 12px;
+  }
+
+  .bank-import-status {
+    margin: 10px 14px 0;
+  }
+
+  .bank-import-summary {
+    gap: 6px;
+    padding: 10px 14px;
+  }
+
+  .bank-import-summary > div {
+    padding: 8px;
+  }
+
+  .bank-import-summary strong {
+    font-size: 0.86rem;
+  }
+
+  .bank-import-table-wrap {
+    margin: 0 14px;
+    border: 0;
+    background: transparent;
+  }
+
+  .bank-import-table {
+    min-width: 0;
+  }
+
+  .bank-import-table thead {
+    display: none;
+  }
+
+  .bank-import-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .bank-import-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    border: 1px solid var(--sintesa-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 12px;
+  }
+
+  .bank-import-table td {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+    border: 0;
+    padding: 0;
+  }
+
+  .bank-import-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .bank-import-table .bank-select-column,
+  .bank-import-table td[data-label="Status"],
+  .bank-import-table td[data-label="Keterangan"] {
+    grid-column: 1 / -1;
+    width: auto;
+    text-align: left;
+  }
+
+  .bank-import-table .bank-select-column {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .bank-import-table .bank-date-input,
+  .bank-import-table .bank-description-input,
+  .bank-import-table .bank-amount-input {
+    min-width: 0 !important;
+  }
+
+  .bank-import-footer {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 14px 14px;
+  }
+
+  .bank-import-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
 /* Component audit fix: transaction filter controls must share one size system. */
 .table-heading {
   align-items: end;

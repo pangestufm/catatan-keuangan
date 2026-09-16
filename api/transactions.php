@@ -138,7 +138,9 @@ function sanitizeTransactions(array $transactions): array
             'description' => cleanString($transaction['description'] ?? ''),
             'amount' => (int) round($amount),
             'source' => cleanString($transaction['source'] ?? 'Online'),
+            'bankReference' => cleanString($transaction['bankReference'] ?? ''),
             'createdAt' => cleanString($transaction['createdAt'] ?? gmdate(DATE_ATOM)),
+            'updatedAt' => cleanString($transaction['updatedAt'] ?? ''),
         ];
     }
 

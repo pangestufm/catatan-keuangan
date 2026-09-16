@@ -327,7 +327,9 @@ function sanitizeTransactions(transactions) {
       description: cleanString(transaction.description || "-"),
       amount: Math.round(Number(transaction.amount)),
       source: cleanString(transaction.source || "Online"),
+      bankReference: cleanString(transaction.bankReference || ""),
       createdAt: cleanString(transaction.createdAt || new Date().toISOString()),
+      updatedAt: cleanString(transaction.updatedAt || ""),
     }));
 }
 

@@ -42,7 +42,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 5. Deploy ulang site di Netlify.
 
-`AI_PROVIDER` menentukan agent AI untuk fitur catat cepat. Isi `gemini` untuk Gemini atau `openai` untuk OpenAI. Jika memakai Gemini, isi `GEMINI_API_KEY`; `GEMINI_MODEL` opsional dan default-nya `gemini-2.5-flash`. Jika memakai OpenAI, isi `OPENAI_API_KEY`; `OPENAI_MODEL` opsional dan default-nya `gpt-4o-mini`.
+`AI_PROVIDER` menentukan agent AI untuk fitur catat cepat. Isi `gemini` untuk Gemini atau `openai` untuk OpenAI. Jika memakai Gemini, isi `GEMINI_API_KEY`; `GEMINI_MODEL` opsional dan default-nya `gemini-2.5-flash`. Jika memakai OpenAI, isi `OPENAI_API_KEY`; `OPENAI_MODEL` opsional dan default-nya `gpt-4o-mini`. Fitur impor mutasi bank memakai Gemini karena membutuhkan pembacaan PDF dan gambar.
 
 ### 2. Environment variables
 
@@ -115,6 +115,10 @@ Jika masih `Mode Lokal`, cek:
 - Import `.xlsx` / `.xls` dari format Excel lama:
   - Pemasukan: kolom A uraian, kolom B tanggal, kolom C nominal.
   - Pengeluaran: kolom E uraian, kolom F tanggal, kolom G kategori, kolom H nominal.
+- Import mutasi bank dengan agent Gemini dari PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX (maksimal 3,5 MB).
+- Review batch sebelum impor: tanggal, jenis, kategori, keterangan, dan nominal dapat diedit; transaksi dapat dipilih atau dibatalkan satu per satu.
+- Rekonsiliasi unggahan mutasi yang periodenya tumpang tindih: semua baris tetap diperiksa dan diberi status `Baru`, `Sudah ada`, atau `Berubah` sebelum database diperbarui.
+- Transaksi lama tidak diinput ulang. Perubahan pada transaksi lama hanya diterapkan setelah barisnya dipilih secara manual di layar review.
 - Catat cepat dari chat, contoh: `belanja pizza tanggal 4 200000`.
 - Agent AI Gemini/OpenAI untuk membaca konteks chat/voice dengan Structured Outputs. Jika provider AI gagal, aplikasi otomatis fallback ke parser lokal.
 - Voice input untuk catat cepat di browser yang mendukung Speech Recognition.
@@ -122,8 +126,8 @@ Jika masih `Mode Lokal`, cek:
 - Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.
 - Pembelajaran kategori lokal per workspace dari transaksi yang dikonfirmasi atau dikoreksi.
 - Dark mode.
-- Export `.csv` untuk import ke Google Sheets sekaligus backup yang bisa diimport ulang ke aplikasi.
-- Export `.xls` untuk dibuka di Microsoft Excel sekaligus backup yang bisa diimport ulang ke aplikasi.
+- Export `.csv` untuk import ke Google Sheets sekaligus backup yang bisa diimport ulang ke aplikasi, termasuk referensi bank dan waktu pembaruan.
+- Export `.xls` untuk dibuka di Microsoft Excel sekaligus backup yang bisa diimport ulang ke aplikasi, termasuk referensi bank dan waktu pembaruan.
 
 ## Catatan penyimpanan
 

@@ -109,6 +109,20 @@
             </button>
           </div>
           <div class="tools-panel-actions">
+          <label class="button secondary file-button bank-file-button" title="Baca mutasi bank dengan AI">
+            <span class="tool-action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 10h16" />
+                <path d="M5 10 12 5l7 5" />
+                <path d="M7 10v7" />
+                <path d="M12 10v7" />
+                <path d="M17 10v7" />
+                <path d="M4 20h16" />
+              </svg>
+            </span>
+            Mutasi Bank AI
+            <input id="bankStatementInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.xls" hidden />
+          </label>
           <label class="button secondary file-button" title="Import transaksi dari Excel atau CSV backup">
             <span aria-hidden="true">IMP</span>
             Import File
@@ -305,6 +319,68 @@
         </div>
       </section>
 
+      <section class="modal-backdrop bank-import-backdrop hidden" id="bankImportModal" aria-modal="true" role="dialog" aria-labelledby="bankImportTitle">
+        <div class="bank-import-modal">
+          <div class="modal-heading bank-import-heading">
+            <div>
+              <p class="eyebrow">Impor mutasi bank</p>
+              <h2 id="bankImportTitle">Tinjau Hasil Agent</h2>
+              <p class="bank-import-file" id="bankImportFileName">Dokumen belum dipilih</p>
+            </div>
+            <button class="icon-button" id="closeBankImportButton" type="button" aria-label="Tutup impor mutasi bank">X</button>
+          </div>
+
+          <p class="status-text bank-import-status" id="bankImportStatus" aria-live="polite">
+            Agent akan membaca transaksi, bukan saldo awal atau saldo akhir. Periksa hasilnya sebelum menyimpan.
+          </p>
+
+          <div class="bank-import-summary" aria-label="Ringkasan hasil pembacaan dokumen">
+            <div>
+              <span>Dipilih</span>
+              <strong id="bankImportSelectedCount">0</strong>
+            </div>
+            <div class="income">
+              <span>Pemasukan</span>
+              <strong id="bankImportIncomeTotal">Rp0</strong>
+            </div>
+            <div class="expense">
+              <span>Pengeluaran</span>
+              <strong id="bankImportExpenseTotal">Rp0</strong>
+            </div>
+          </div>
+
+          <div class="bank-import-table-wrap">
+            <table class="bank-import-table">
+              <thead>
+                <tr>
+                  <th class="bank-select-column"><span class="sr-only">Pilih</span></th>
+                  <th>Tanggal</th>
+                  <th>Jenis</th>
+                  <th>Kategori</th>
+                  <th>Keterangan</th>
+                  <th class="numeric">Nominal</th>
+                  <th>Status</th>
+                  <th>Keyakinan</th>
+                </tr>
+              </thead>
+              <tbody id="bankImportRows"></tbody>
+            </table>
+          </div>
+
+          <div class="bank-import-footer">
+            <label class="bank-select-all">
+              <input id="bankImportSelectAll" type="checkbox" checked />
+              Pilih semua
+            </label>
+            <p class="bank-import-privacy">Dokumen diproses oleh provider AI yang dikonfigurasi di Netlify.</p>
+            <div class="bank-import-actions">
+              <button class="button ghost" id="cancelBankImportButton" type="button">Batal</button>
+              <button class="button primary" id="saveBankImportButton" type="button">Simpan Transaksi Terpilih</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel category-panel" id="categoryPanel">
         <div class="panel-heading">
           <div>
@@ -468,6 +544,7 @@
     </button>
 
     <script src="vendor/xlsx.full.min.js"></script>
-    <script src="app.js?v=20260708-category-rail-fix"></script>
+    <script src="bank-reconciliation.js?v=20260916-reconcile"></script>
+    <script src="app.js?v=20260916-bank-reconcile"></script>
   </body>
 </html>
