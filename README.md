@@ -38,11 +38,13 @@ GEMINI_API_KEY=isi_dengan_api_key_gemini
 GEMINI_MODEL=gemini-2.5-flash
 OPENAI_API_KEY=isi_dengan_api_key_openai
 OPENAI_MODEL=gpt-4o-mini
+NEXOS_API_KEY=isi_dengan_api_key_nexos
+NEXOS_MODEL=DeepSeek V4.1 Flash
 ```
 
 5. Deploy ulang site di Netlify.
 
-`AI_PROVIDER` menentukan agent AI untuk fitur catat cepat. Isi `gemini` untuk Gemini atau `openai` untuk OpenAI. Jika memakai Gemini, isi `GEMINI_API_KEY`; `GEMINI_MODEL` opsional dan default-nya `gemini-2.5-flash`. Jika memakai OpenAI, isi `OPENAI_API_KEY`; `OPENAI_MODEL` opsional dan default-nya `gpt-4o-mini`. Fitur impor mutasi bank memakai Gemini karena membutuhkan pembacaan PDF dan gambar.
+`AI_PROVIDER` menentukan agent AI untuk fitur catat cepat. Isi `gemini` untuk Gemini atau `openai` untuk OpenAI. Jika memakai Gemini, isi `GEMINI_API_KEY`; `GEMINI_MODEL` opsional dan default-nya `gemini-2.5-flash`. Jika memakai OpenAI, isi `OPENAI_API_KEY`; `OPENAI_MODEL` opsional dan default-nya `gpt-4o-mini`. Fitur impor mutasi bank memakai Nexos; `NEXOS_MODEL` opsional dan default-nya `DeepSeek V4.1 Flash`.
 
 ### 2. Environment variables
 
@@ -55,9 +57,11 @@ GEMINI_API_KEY=isi_dengan_api_key_gemini
 GEMINI_MODEL=gemini-2.5-flash
 OPENAI_API_KEY=isi_dengan_api_key_openai
 OPENAI_MODEL=gpt-4o-mini
+NEXOS_API_KEY=isi_dengan_api_key_nexos
+NEXOS_MODEL=DeepSeek V4.1 Flash
 ```
 
-`APP_ACCESS_TOKEN` wajib untuk mode online. Variabel AI hanya diperlukan jika ingin fitur agent chat/voice memakai Gemini atau OpenAI.
+`APP_ACCESS_TOKEN` wajib untuk mode online. Variabel Gemini/OpenAI diperlukan jika ingin fitur agent chat/voice. `NEXOS_API_KEY` diperlukan untuk fitur impor mutasi bank.
 
 ### 3. Buat Netlify Database
 
@@ -115,7 +119,7 @@ Jika masih `Mode Lokal`, cek:
 - Import `.xlsx` / `.xls` dari format Excel lama:
   - Pemasukan: kolom A uraian, kolom B tanggal, kolom C nominal.
   - Pengeluaran: kolom E uraian, kolom F tanggal, kolom G kategori, kolom H nominal.
-- Import mutasi bank dengan agent Gemini dari PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX (maksimal 3,5 MB).
+- Import mutasi bank dengan agent Nexos `DeepSeek V4.1 Flash` dari PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX (maksimal 3,5 MB; PDF maksimal 6 halaman per unggahan).
 - Review batch sebelum impor: tanggal, jenis, kategori, keterangan, dan nominal dapat diedit; transaksi dapat dipilih atau dibatalkan satu per satu.
 - Rekonsiliasi unggahan mutasi yang periodenya tumpang tindih: semua baris tetap diperiksa dan diberi status `Baru`, `Sudah ada`, atau `Berubah` sebelum database diperbarui.
 - Transaksi lama tidak diinput ulang. Perubahan pada transaksi lama hanya diterapkan setelah barisnya dipilih secara manual di layar review.

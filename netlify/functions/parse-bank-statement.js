@@ -5,9 +5,20 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-const MAX_BASE64_LENGTH = 5 * 1024 * 1024;
+const NEXOS_API_URL = "https://api.nexos.ai/v1/chat/completions";
+const DEFAULT_NEXOS_MODEL = "DeepSeek V4.1 Flash";
+const MAX_IMAGE_COUNT = 6;
+const MAX_TOTAL_BASE64_LENGTH = 6 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 250000;
+const NEXOS_TIMEOUT_MS = 25000;
+
+class AgentError extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.name = "AgentError";
+    this.statusCode = statusCode;
+  }
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return respond(204, {});
@@ -20,20 +31,21 @@ exports.handler = async (event) => {
   }
 
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      return respond(503, { error: "GEMINI_API_KEY belum diisi di Netlify environment variables." });
+    if (!process.env.NEXOS_API_KEY) {
+      return respond(503, { error: "NEXOS_API_KEY belum diisi di Netlify environment variables." });
     }
 
     const payload = JSON.parse(event.body || "{}");
     const context = sanitizeContext(payload);
-    if (!context.documentBase64 && !context.documentText) {
+    if (!context.documentImages.length && !context.documentText) {
       return respond(422, { error: "Dokumen mutasi bank wajib disertakan." });
     }
 
-    const result = await callGemini(context);
+    const { result, model } = await callNexos(context);
     const transactions = sanitizeTransactions(result?.transactions, context.today);
     return respond(200, {
-      provider: "gemini",
+      provider: "nexos",
+      model,
       statement: {
         institution: cleanString(result?.statement?.institution),
         accountName: cleanString(result?.statement?.accountName),
@@ -42,20 +54,31 @@ exports.handler = async (event) => {
       transactions,
     });
   } catch (error) {
-    return respond(500, { error: "Agent gagal membaca mutasi bank.", message: error.message });
+    const statusCode = error instanceof AgentError ? error.statusCode : 500;
+    const message = error instanceof AgentError
+      ? error.message
+      : "Agent gagal membaca mutasi bank.";
+    return respond(statusCode, { error: message });
   }
 };
 
 function sanitizeContext(payload) {
-  const documentBase64 = cleanString(payload.documentBase64);
-  if (documentBase64.length > MAX_BASE64_LENGTH) {
-    throw new Error("Ukuran dokumen melebihi batas pemrosesan.");
+  const documentImages = sanitizeDocumentImages(payload.documentImages);
+  const legacyBase64 = cleanString(payload.documentBase64);
+  const legacyMimeType = normalizeImageMimeType(payload.mimeType);
+
+  if (!documentImages.length && legacyBase64 && legacyMimeType) {
+    documentImages.push({ mimeType: legacyMimeType, data: legacyBase64 });
+  }
+
+  const totalBase64Length = documentImages.reduce((total, image) => total + image.data.length, 0);
+  if (totalBase64Length > MAX_TOTAL_BASE64_LENGTH) {
+    throw new AgentError(413, "Dokumen terlalu besar untuk diproses. Kurangi jumlah halaman lalu ulangi.");
   }
 
   return {
     fileName: cleanString(payload.fileName).slice(0, 180),
-    mimeType: normalizeMimeType(payload.mimeType),
-    documentBase64,
+    documentImages,
     documentText: cleanString(payload.documentText).slice(0, MAX_TEXT_LENGTH),
     today: /^\d{4}-\d{2}-\d{2}$/.test(cleanString(payload.today))
       ? cleanString(payload.today)
@@ -67,46 +90,78 @@ function sanitizeContext(payload) {
   };
 }
 
-async function callGemini(context) {
-  const model = normalizeGeminiModelName(process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
-  const parts = [{ text: buildPrompt(context) }];
+function sanitizeDocumentImages(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_IMAGE_COUNT).map((image) => ({
+    mimeType: normalizeImageMimeType(image?.mimeType),
+    data: cleanString(image?.data),
+  })).filter((image) => image.mimeType && image.data);
+}
 
-  if (context.documentText) {
-    parts.push({ text: `\nIsi dokumen dalam format teks/CSV:\n${context.documentText}` });
-  } else {
-    parts.push({
-      inline_data: {
-        mime_type: context.mimeType,
-        data: context.documentBase64,
+async function callNexos(context) {
+  const model = cleanString(process.env.NEXOS_MODEL) || DEFAULT_NEXOS_MODEL;
+  const content = [{ type: "text", text: buildPromptWithDocument(context) }];
+
+  context.documentImages.forEach((image) => {
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${image.mimeType};base64,${image.data}`,
       },
     });
-  }
-
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": process.env.GEMINI_API_KEY,
-    },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: getResponseSchema(),
-        temperature: 0.1,
-        maxOutputTokens: 32768,
-      },
-    }),
   });
 
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body?.error?.message || `Gemini API error ${response.status}`);
-  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), NEXOS_TIMEOUT_MS);
 
-  const outputText = extractGeminiText(body);
-  if (!outputText) throw new Error("Respons Gemini tidak berisi hasil JSON.");
-  return JSON.parse(outputText);
+  try {
+    const response = await fetch(NEXOS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.NEXOS_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content }],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 16000,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const rawBody = await response.text().catch(() => "");
+      if (response.status === 504) {
+        throw new AgentError(504, "Nexos terlalu lama memproses dokumen. Coba kurangi jumlah halaman lalu ulangi.");
+      }
+      const providerMessage = extractProviderError(rawBody);
+      throw new AgentError(502, providerMessage || `Nexos API gagal (status ${response.status}).`);
+    }
+
+    const body = await response.json().catch(() => {
+      throw new AgentError(502, "Respons Nexos bukan JSON yang valid.");
+    });
+    const outputText = extractNexosText(body);
+    if (!outputText) throw new AgentError(502, "Respons Nexos tidak berisi hasil transaksi.");
+
+    return { result: parseJsonOutput(outputText), model };
+  } catch (error) {
+    if (error instanceof AgentError) throw error;
+    if (error?.name === "AbortError") {
+      throw new AgentError(504, "Nexos terlalu lama memproses dokumen. Coba kurangi jumlah halaman lalu ulangi.");
+    }
+    throw new AgentError(502, "Nexos tidak dapat dihubungi. Coba beberapa saat lagi.");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function buildPromptWithDocument(context) {
+  const prompt = buildPrompt(context);
+  if (!context.documentText) return prompt;
+  return `${prompt}\n\nIsi dokumen dalam format teks/CSV:\n${context.documentText}`;
 }
 
 function buildPrompt(context) {
@@ -135,43 +190,65 @@ function buildPrompt(context) {
     "",
     `Kebiasaan kategori user: ${JSON.stringify(context.categoryMemory)}`,
     `Contoh transaksi terbaru user: ${JSON.stringify(context.recentTransactions)}`,
-    "Balas hanya JSON sesuai schema.",
+    `Balas hanya JSON dengan bentuk: ${JSON.stringify(getResponseShape())}`,
   ].join("\n");
 }
 
-function getResponseSchema() {
+function getResponseShape() {
   return {
-    type: "object",
-    required: ["statement", "transactions"],
-    properties: {
-      statement: {
-        type: "object",
-        required: ["institution", "accountName", "period"],
-        properties: {
-          institution: { type: "string" },
-          accountName: { type: "string" },
-          period: { type: "string" },
-        },
-      },
-      transactions: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["date", "type", "category", "description", "amount", "reference", "confidence", "reason"],
-          properties: {
-            date: { type: "string", description: "Tanggal YYYY-MM-DD" },
-            type: { type: "string", enum: ["income", "expense"] },
-            category: { type: "string" },
-            description: { type: "string" },
-            amount: { type: "number" },
-            reference: { type: "string" },
-            confidence: { type: "number" },
-            reason: { type: "string" },
-          },
-        },
-      },
+    statement: {
+      institution: "string",
+      accountName: "string",
+      period: "string",
     },
+    transactions: [{
+      date: "YYYY-MM-DD",
+      type: "income atau expense",
+      category: "string",
+      description: "string",
+      amount: "number positif",
+      reference: "string",
+      confidence: "number 0 sampai 1",
+      reason: "string",
+    }],
   };
+}
+
+function extractNexosText(body) {
+  const content = body?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => (
+    typeof part === "string" ? part : cleanString(part?.text)
+  )).filter(Boolean).join("\n").trim();
+}
+
+function parseJsonOutput(value) {
+  const cleaned = cleanString(value)
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new AgentError(502, "Respons Nexos tidak memiliki struktur transaksi yang valid.");
+  }
+
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new AgentError(502, "Respons Nexos tidak memiliki struktur transaksi yang valid.");
+  }
+}
+
+function extractProviderError(rawBody) {
+  const value = cleanString(rawBody);
+  if (!value || /<html[\s>]/i.test(value)) return "";
+  try {
+    const payload = JSON.parse(value);
+    return cleanString(payload?.error?.message || payload?.message).slice(0, 240);
+  } catch {
+    return value.slice(0, 240);
+  }
 }
 
 function sanitizeTransactions(value, fallbackDate) {
@@ -213,23 +290,10 @@ function sanitizeList(value) {
   return value.map(cleanString).filter(Boolean);
 }
 
-function normalizeMimeType(value) {
+function normalizeImageMimeType(value) {
   const mimeType = cleanString(value).toLowerCase();
-  const supported = ["application/pdf", "image/png", "image/jpeg", "image/webp", "text/csv"];
-  return supported.includes(mimeType) ? mimeType : "application/pdf";
-}
-
-function normalizeGeminiModelName(value) {
-  const model = cleanString(value) || DEFAULT_GEMINI_MODEL;
-  return model.startsWith("models/") ? model : `models/${model}`;
-}
-
-function extractGeminiText(body) {
-  return (body.candidates || []).flatMap((candidate) => (
-    candidate.content?.parts || []
-  )).map((part) => (
-    typeof part.text === "string" ? part.text : ""
-  )).join("\n").trim();
+  const supported = ["image/png", "image/jpeg", "image/webp"];
+  return supported.includes(mimeType) ? mimeType : "";
 }
 
 function cleanString(value) {

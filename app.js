@@ -77,6 +77,7 @@ const state = {
   pendingDraft: null,
   bankImportDrafts: [],
   bankImportFileName: "",
+  pdfJsPromise: null,
   isSyncing: false,
   syncTimer: null,
   trendMode: "monthly",
@@ -542,6 +543,10 @@ async function requestApiUrl(apiUrl, method, payload) {
 }
 
 async function readApiError(response) {
+  if (response.status === 504) {
+    return "API error 504: Waktu pemrosesan habis. Kurangi jumlah halaman lalu coba lagi.";
+  }
+
   try {
     const payload = await response.clone().json();
     const message = payload?.message || payload?.error;
@@ -549,7 +554,9 @@ async function readApiError(response) {
   } catch {
     try {
       const text = await response.clone().text();
-      if (text) return `API error ${response.status}: ${text.slice(0, 180)}`;
+      if (text && !/<html[\s>]/i.test(text)) {
+        return `API error ${response.status}: ${text.slice(0, 180)}`;
+      }
     } catch {
       return "";
     }
@@ -816,10 +823,42 @@ async function buildBankStatementDocumentPayload(file) {
     throw new Error("Format belum didukung. Gunakan PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX.");
   }
 
+  if (mimeType === "application/pdf") {
+    if (!window.BankDocument?.renderPdfToImages) {
+      throw new Error("Modul pengolah PDF belum termuat. Muat ulang halaman lalu coba lagi.");
+    }
+    showBankImportStatus(`Menyiapkan maksimal ${window.BankDocument.MAX_PDF_PAGES} halaman PDF untuk agent...`, "info");
+    const pdfjs = await loadPdfJs();
+    const documentText = await window.BankDocument.extractPdfText(file, pdfjs);
+    if (documentText.replace(/=== Halaman \d+ ===/g, "").trim().length >= 40) {
+      return { documentText, mimeType: "text/plain" };
+    }
+    return {
+      documentImages: await window.BankDocument.renderPdfToImages(file, pdfjs),
+      mimeType,
+    };
+  }
+
   return {
-    documentBase64: await fileToBase64(file),
+    documentImages: [{
+      data: await fileToBase64(file),
+      mimeType,
+    }],
     mimeType,
   };
+}
+
+async function loadPdfJs() {
+  if (!state.pdfJsPromise) {
+    state.pdfJsPromise = import("./vendor/pdf.min.mjs").then((pdfjs) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("vendor/pdf.worker.min.mjs", document.baseURI).href;
+      return pdfjs;
+    }).catch((error) => {
+      state.pdfJsPromise = null;
+      throw error;
+    });
+  }
+  return state.pdfJsPromise;
 }
 
 function getBankStatementMimeType(extension) {
