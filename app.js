@@ -203,12 +203,23 @@ function initialize() {
 }
 
 function bindEvents() {
+  window.matchMedia('(max-width: 600px)').addEventListener('change', () => {
+    const category = elements.categorySummarySelect.value || 'all';
+    renderTrendChart(category);
+    renderDailyExpenseChart(category);
+  });
   elements.form.addEventListener("submit", handleSubmit);
   elements.amountInput.addEventListener("input", formatCurrencyInput);
   elements.draftAmountInput.addEventListener("input", formatCurrencyInput);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.monthFilterInput.addEventListener("change", handleMonthFilterChange);
   elements.globalSearchInput.addEventListener("input", handleGlobalSearchChange);
+  elements.globalSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openDetailTransactions();
+    }
+  });
   elements.navQuickEntryButton.addEventListener("click", openQuickEntryFromNav);
   elements.showAllMonthsButton.addEventListener("click", showAllMonths);
   elements.filterDate.addEventListener("change", (event) => {
@@ -220,7 +231,19 @@ function bindEvents() {
     render();
   });
   elements.clearDateFilterButton.addEventListener("click", clearDateFilter);
-  elements.categorySummarySelect.addEventListener("change", renderCategorySummary);
+  elements.categorySummarySelect.addEventListener("change", () => {
+    renderCategorySummary();
+    renderTable();
+  });
+  document.querySelector("#resetTransactionFilters").addEventListener("click", () => {
+    state.filters.date = "";
+    state.filters.search = "";
+    elements.filterDate.value = "";
+    elements.globalSearchInput.value = "";
+    elements.categorySummarySelect.value = "all";
+    renderCategorySummary();
+    renderTable();
+  });
   elements.categoryBars.addEventListener("click", handleCategoryChartClick);
   elements.trendModeButtons.addEventListener("click", handleTrendModeChange);
   elements.exportCsvButton.addEventListener("click", exportCsv);
@@ -234,7 +257,6 @@ function bindEvents() {
   elements.closeBankImportButton.addEventListener("click", closeBankImportModal);
   elements.cancelBankImportButton.addEventListener("click", closeBankImportModal);
   elements.saveBankImportButton.addEventListener("click", saveBankImportDrafts);
-  elements.bankImportModal.addEventListener("click", closeBankImportFromBackdrop);
   elements.chatForm.addEventListener("submit", handleChatSubmit);
   elements.voiceButton.addEventListener("click", startVoiceInput);
   elements.confirmDraftButton.addEventListener("click", confirmDraftTransaction);
@@ -243,13 +265,11 @@ function bindEvents() {
   elements.quickEntryButton.addEventListener("click", openQuickEntryModal);
   elements.toolsPanelButton.addEventListener("click", toggleToolsPanel);
   elements.closeToolsPanelButton.addEventListener("click", () => closeToolsPanel(true));
-  elements.toolsPanel.addEventListener("click", closeToolsPanelFromBackdrop);
-  document.addEventListener("keydown", closePanelsWithEscape);
   elements.detailToggleButton.addEventListener("click", openDetailTransactions);
   elements.closeQuickEntryButton.addEventListener("click", closeQuickEntryModal);
   elements.closeDetailButton.addEventListener("click", closeDetailTransactions);
-  elements.quickEntryModal.addEventListener("click", closeQuickEntryFromBackdrop);
   elements.themeToggle.addEventListener("click", toggleTheme);
+  document.querySelector("#themeQuickButton").addEventListener("click", toggleTheme);
   elements.loginForm.addEventListener("submit", handleLoginSubmit);
   elements.localModeButton.addEventListener("click", enterLocalMode);
   elements.logoutButton.addEventListener("click", logout);
@@ -326,6 +346,8 @@ function showLogin() {
   elements.detailToggleButton.classList.add("hidden");
   closeDetailTransactions();
   closeQuickEntryModal();
+  closeToolsPanel();
+  closeBankImportModal();
   elements.loginScreen.classList.remove("hidden");
   elements.workspaceInput.focus();
 }
@@ -343,10 +365,7 @@ function logout() {
 }
 
 function openQuickEntryModal() {
-  closeToolsPanel(false);
-  document.body.classList.add("quick-entry-open");
-  elements.quickEntryModal.classList.remove("hidden");
-  elements.chatInput.focus();
+  window.DashboardUI.openEntry();
 }
 
 function openQuickEntryFromNav(event) {
@@ -355,28 +374,18 @@ function openQuickEntryFromNav(event) {
 }
 
 function closeQuickEntryModal() {
-  document.body.classList.remove("quick-entry-open");
-  elements.quickEntryModal.classList.add("hidden");
-}
-
-function closeQuickEntryFromBackdrop(event) {
-  if (event.target === elements.quickEntryModal) {
-    closeQuickEntryModal();
-  }
+  window.DashboardUI.close(elements.quickEntryModal);
 }
 
 function openToolsPanel() {
   closeQuickEntryModal();
   closeBankImportModal();
-  document.body.classList.add("tools-open");
-  elements.toolsPanel.classList.add("is-open");
-  elements.toolsPanel.setAttribute("aria-hidden", "false");
-  elements.toolsPanelButton.setAttribute("aria-expanded", "true");
-  elements.closeToolsPanelButton.focus();
+  closeDetailTransactions();
+  window.DashboardUI.open(elements.toolsPanel, elements.closeToolsPanelButton);
 }
 
 function toggleToolsPanel() {
-  if (elements.toolsPanel.classList.contains("is-open")) {
+  if (elements.toolsPanel.open) {
     closeToolsPanel();
     return;
   }
@@ -384,35 +393,18 @@ function toggleToolsPanel() {
 }
 
 function closeToolsPanel(shouldRestoreFocus = false) {
-  document.body.classList.remove("tools-open");
-  elements.toolsPanel.classList.remove("is-open");
-  elements.toolsPanel.setAttribute("aria-hidden", "true");
-  elements.toolsPanelButton.setAttribute("aria-expanded", "false");
+  window.DashboardUI.close(elements.toolsPanel);
   if (shouldRestoreFocus) {
     elements.toolsPanelButton.focus();
   }
 }
 
-function closeToolsPanelFromBackdrop(event) {
-  if (event.target === elements.toolsPanel) {
-    closeToolsPanel(true);
-  }
-}
-
-function closePanelsWithEscape(event) {
-  if (event.key !== "Escape") return;
-  closeToolsPanel(true);
-  closeQuickEntryModal();
-  closeBankImportModal();
-  closeDetailTransactions();
-}
-
 function openDetailTransactions() {
-  document.body.classList.add("detail-open");
+  window.DashboardUI.openDetails();
 }
 
 function closeDetailTransactions() {
-  document.body.classList.remove("detail-open");
+  window.DashboardUI.close(document.querySelector("#detailDialog"));
 }
 
 function saveSession() {
@@ -626,6 +618,7 @@ function isValidTransaction(transaction) {
 
 function handleSubmit(event) {
   event.preventDefault();
+  if (!elements.form.reportValidity()) return;
 
   const amount = window.CurrencyInput.parseRupiahInput(elements.amountInput.value);
   const category = elements.categoryInput.value.trim();
@@ -649,23 +642,30 @@ function handleSubmit(event) {
 
   const existingIndex = state.transactions.findIndex((item) => item.id === transaction.id);
   if (existingIndex >= 0) {
-    transaction.createdAt = state.transactions[existingIndex].createdAt;
-    transaction.source = state.transactions[existingIndex].source || transaction.source;
-    state.transactions[existingIndex] = transaction;
+    const existing = state.transactions[existingIndex];
+    state.transactions[existingIndex] = {
+      ...existing, ...transaction,
+      createdAt: existing.createdAt,
+      source: existing.source || transaction.source,
+      updatedAt: new Date().toISOString(),
+    };
   } else {
     state.transactions.unshift(transaction);
   }
 
   rememberCategory(transaction.description, transaction.category);
   saveTransactions();
+  followTransactionPeriod(transaction.date);
   resetForm();
   render();
   closeQuickEntryModal();
+  window.DashboardUI.toast("Transaksi tersimpan.");
 }
 
 async function importExcelFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+  closeToolsPanel(false);
 
   if (!window.XLSX) {
     showImportStatus("Parser Excel/CSV belum termuat. Pastikan file vendor/xlsx.full.min.js ada.", "error");
@@ -676,7 +676,7 @@ async function importExcelFile(event) {
   try {
     showImportStatus(`Membaca ${file.name}...`, "info");
     const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+    const workbook = readImportWorkbook(buffer, file.name);
     const importedTransactions = parseWorkbookTransactions(workbook);
 
     if (!importedTransactions.length) {
@@ -684,19 +684,25 @@ async function importExcelFile(event) {
       return;
     }
 
-    const existingKeys = new Set(state.transactions.map(createTransactionKey));
-    const newTransactions = importedTransactions.filter((transaction) => {
-      const key = createTransactionKey(transaction);
-      if (existingKeys.has(key)) return false;
-      existingKeys.add(key);
-      return true;
-    });
+    let newTransactions = getPendingImportedTransactions(importedTransactions);
 
     if (!newTransactions.length) {
       showImportStatus(`Semua ${importedTransactions.length} transaksi dari file sudah ada di aplikasi.`, "info");
       return;
     }
 
+    const dates = newTransactions.map((item) => item.date).sort();
+    const confirmed = await window.DashboardUI.confirm({
+      title: "Pulihkan backup?",
+      message: `${newTransactions.length} transaksi baru (${formatDate(dates[0])} - ${formatDate(dates.at(-1))}). ${importedTransactions.length - newTransactions.length} duplikat dilewati. Data yang sudah ada tetap disimpan.`,
+      accept: "Impor transaksi",
+    });
+    if (!confirmed) return;
+    newTransactions = getPendingImportedTransactions(importedTransactions);
+    if (!newTransactions.length) {
+      showImportStatus("Transaksi dalam backup sudah ada setelah sinkronisasi. Tidak ada duplikat yang ditambahkan.", "info");
+      return;
+    }
     state.transactions = [...newTransactions, ...state.transactions];
     saveTransactions();
     resetForm();
@@ -714,9 +720,51 @@ async function importExcelFile(event) {
   }
 }
 
+function readImportWorkbook(buffer, fileName) {
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  if (!/\.csv$/i.test(fileName)) return workbook;
+
+  // Preserve text identifiers without changing XLSX's date and amount coercion.
+  const rawWorkbook = XLSX.read(buffer, { type: "array", raw: true });
+  workbook.SheetNames.forEach((name) => {
+    const rawSheet = rawWorkbook.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(rawSheet, { header: 1, raw: true, defval: null });
+    const headerIndex = findBackupHeaderRowIndex(rows);
+    if (headerIndex < 0) return;
+    const textColumns = rows[headerIndex].map((value, index) => (
+      ["id", "jenis", "kategori", "deskripsi", "sumber", "referensi bank", "dibuat pada", "diperbarui pada"].includes(normalizeText(value)) ? index : -1
+    )).filter((index) => index >= 0);
+    for (let row = headerIndex + 1; row < rows.length; row += 1) {
+      textColumns.forEach((column) => {
+        const address = XLSX.utils.encode_cell({ r: row, c: column });
+        const cell = rawSheet[address];
+        if (cell) workbook.Sheets[name][address] = { t: "s", v: String(cell.v ?? "") };
+      });
+    }
+  });
+  return workbook;
+}
+
+function getPendingImportedTransactions(importedTransactions) {
+  const existingKeys = new Set(state.transactions.map(createTransactionKey));
+  const existingIds = new Set(state.transactions.map((item) => item.id).filter(Boolean));
+  return importedTransactions.filter((transaction) => {
+    const key = createTransactionKey(transaction);
+    if (existingKeys.has(key) || existingIds.has(transaction.id)) return false;
+    existingKeys.add(key);
+    if (transaction.id) existingIds.add(transaction.id);
+    return true;
+  });
+}
+
 async function importBankStatementFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+  if (elements.bankImportModal.getAttribute("aria-busy") === "true") {
+    event.target.value = "";
+    window.DashboardUI.toast("Pembacaan dokumen sebelumnya masih berlangsung.", "info");
+    return;
+  }
 
   closeToolsPanel(false);
   state.bankImportDrafts = [];
@@ -926,20 +974,13 @@ async function requestBankStatementAgent(payload) {
 function openBankImportModal() {
   closeQuickEntryModal();
   closeToolsPanel(false);
-  document.body.classList.add("bank-import-open");
-  elements.bankImportModal.classList.remove("hidden");
+  closeDetailTransactions();
+  window.DashboardUI.open(elements.bankImportModal, elements.closeBankImportButton);
   elements.bankImportFileName.textContent = state.bankImportFileName || "Dokumen mutasi bank";
 }
 
 function closeBankImportModal() {
-  document.body.classList.remove("bank-import-open");
-  elements.bankImportModal.classList.add("hidden");
-}
-
-function closeBankImportFromBackdrop(event) {
-  if (event.target === elements.bankImportModal && !elements.bankImportModal.hasAttribute("aria-busy")) {
-    closeBankImportModal();
-  }
+  window.DashboardUI.close(elements.bankImportModal);
 }
 
 function renderBankImportDrafts() {
@@ -1036,6 +1077,7 @@ function saveBankImportDrafts() {
     || !["income", "expense"].includes(draft.type)
     || !cleanText(draft.category)
     || !cleanText(draft.description)
+    || !Number.isFinite(Number(draft.amount))
     || Number(draft.amount) <= 0
   ));
   if (invalidDraft) {
@@ -1108,6 +1150,7 @@ function saveBankImportDrafts() {
     rememberCategory(transaction.description, transaction.category)
   ));
   saveTransactions();
+  followTransactionPeriod(selectedDrafts[0].date);
   render();
   closeBankImportModal();
 
@@ -1188,8 +1231,8 @@ function parseWorkbookTransactions(workbook) {
   return transactions;
 }
 
-function parseBackupTransactionRows(rows, sheetName) {
-  const headerRowIndex = rows.findIndex((row) => {
+function findBackupHeaderRowIndex(rows) {
+  return rows.findIndex((row) => {
     const normalized = row.map(normalizeText);
     return normalized.includes("tanggal")
       && normalized.includes("jenis")
@@ -1197,6 +1240,10 @@ function parseBackupTransactionRows(rows, sheetName) {
       && normalized.includes("deskripsi")
       && normalized.includes("nominal");
   });
+}
+
+function parseBackupTransactionRows(rows, sheetName) {
+  const headerRowIndex = findBackupHeaderRowIndex(rows);
 
   if (headerRowIndex < 0) return [];
 
@@ -1254,6 +1301,7 @@ function parseTransactionType(value) {
 
 async function handleChatSubmit(event) {
   event.preventDefault();
+  if (elements.chatForm.getAttribute("aria-busy") === "true") return;
   const text = elements.chatInput.value.trim();
   if (!text) {
     setChatStatus("Tulis transaksi dulu, misalnya: aku hari ini belanja makanan 10000.", "error");
@@ -1261,16 +1309,29 @@ async function handleChatSubmit(event) {
   }
 
   setChatStatus("Agent sedang membaca konteks transaksi...", "info");
-
-  const parsed = await parseChatTransactionSmart(text);
-  if (!parsed) {
-    setChatStatus("Aku belum bisa menemukan nominalnya. Coba tulis seperti: belanja makanan 10000.", "error");
-    return;
+  elements.chatForm.setAttribute("aria-busy", "true");
+  const submit = document.querySelector("#chatSubmitButton");
+  submit.disabled = true;
+  elements.voiceButton.disabled = true;
+  submit.textContent = "Membaca...";
+  try {
+    const parsed = await parseChatTransactionSmart(text);
+    if (!parsed) {
+      setChatStatus("Aku belum bisa menemukan nominalnya. Coba tulis seperti: belanja makanan 10000.", "error");
+      return;
+    }
+    showDraft(parsed);
+    elements.chatInput.value = "";
+    setChatStatus(`Draft dibuat dari ${getDraftSourceLabel(parsed.source)}. Cek dulu, lalu simpan atau ubah manual.`, "info");
+  } catch (error) {
+    setChatStatus("Pembacaan gagal. Draft belum disimpan; coba ulangi.", "error");
+  } finally {
+    elements.chatForm.removeAttribute("aria-busy");
+    submit.disabled = false;
+    elements.voiceButton.disabled = false;
+    submit.innerHTML = `${window.DashboardUI.icon("sparkles")}Buat draft`;
+    window.DashboardUI.refreshIcons();
   }
-
-  showDraft(parsed);
-  elements.chatInput.value = "";
-  setChatStatus(`Draft dibuat dari ${getDraftSourceLabel(parsed.source)}. Cek dulu, lalu simpan atau ubah manual.`, "info");
 }
 
 function startVoiceInput() {
@@ -1301,14 +1362,23 @@ function startVoiceInput() {
   });
 
   recognition.addEventListener("end", () => {
-    elements.voiceButton.disabled = false;
-    elements.voiceButton.textContent = "Voice";
+    elements.voiceButton.disabled = elements.chatForm.getAttribute("aria-busy") === "true";
+    elements.voiceButton.innerHTML = `${window.DashboardUI.icon("mic")}Voice`;
+    window.DashboardUI.refreshIcons();
   });
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch {
+    elements.voiceButton.disabled = false;
+    elements.voiceButton.innerHTML = `${window.DashboardUI.icon("mic")}Voice`;
+    window.DashboardUI.refreshIcons();
+    setChatStatus("Mikrofon belum dapat digunakan. Periksa izin browser atau tulis transaksi.", "error");
+  }
 }
 
 function showDraft(parsed) {
+  window.DashboardUI.setEntryMode("chat");
   state.pendingDraft = parsed;
   elements.draftDateInput.value = parsed.date;
   elements.draftTypeInput.value = parsed.type;
@@ -1320,6 +1390,7 @@ function showDraft(parsed) {
 
 function confirmDraftTransaction() {
   if (!state.pendingDraft) return;
+  if (!elements.draftCard.reportValidity()) return;
 
   const amount = window.CurrencyInput.parseRupiahInput(elements.draftAmountInput.value);
   const draft = {
@@ -1340,6 +1411,7 @@ function confirmDraftTransaction() {
   state.transactions.unshift(transaction);
   rememberCategory(transaction.description, transaction.category);
   saveTransactions();
+  followTransactionPeriod(transaction.date);
   render();
   setChatStatus(
     `Tersimpan: ${transaction.type === "income" ? "pemasukan" : "pengeluaran"} ${formatCurrency(transaction.amount)} untuk ${transaction.category}.`,
@@ -1347,6 +1419,7 @@ function confirmDraftTransaction() {
   );
   clearDraft(false);
   closeQuickEntryModal();
+  window.DashboardUI.toast("Draft tersimpan.");
 }
 
 function editDraftManually() {
@@ -1361,6 +1434,7 @@ function editDraftManually() {
     amount: elements.draftAmountInput.value,
   });
   elements.formTitle.textContent = "Koreksi Draft";
+  document.querySelector("#quickEntryTitle").textContent = "Koreksi draft";
   elements.saveButton.textContent = "Simpan Koreksi";
   elements.cancelEditButton.classList.remove("hidden");
   setChatStatus("Draft sudah dipindahkan ke form manual. Koreksi bagian yang perlu, lalu simpan.", "info");
@@ -1637,7 +1711,7 @@ function removeTextRanges(text, ranges) {
     .reduce((currentText, range) => removeTextRange(currentText, range.start, range.end), text);
 }
 
-function handleTableAction(event) {
+async function handleTableAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
@@ -1653,7 +1727,7 @@ function handleTableAction(event) {
   }
 
   if (button.dataset.action === "delete") {
-    const confirmed = confirm(`Hapus transaksi "${transaction.description}"?`);
+    const confirmed = await window.DashboardUI.confirm({ title: "Hapus transaksi?", message: `${transaction.description} - ${formatCurrency(transaction.amount)} (${formatDate(transaction.date)}).`, accept: "Hapus transaksi", danger: true });
     if (!confirmed) return;
 
     state.transactions = state.transactions.filter((item) => item.id !== id);
@@ -1663,6 +1737,7 @@ function handleTableAction(event) {
 }
 
 function fillForm(transaction) {
+  window.DashboardUI.setEntryMode("manual");
   elements.transactionId.value = transaction.id;
   elements.dateInput.value = transaction.date;
   elements.typeInput.value = transaction.type;
@@ -1670,6 +1745,7 @@ function fillForm(transaction) {
   elements.descriptionInput.value = transaction.description;
   elements.amountInput.value = window.CurrencyInput.formatRupiahInput(transaction.amount);
   elements.formTitle.textContent = "Edit Transaksi";
+  document.querySelector("#quickEntryTitle").textContent = "Edit transaksi";
   elements.saveButton.textContent = "Simpan Perubahan";
   elements.cancelEditButton.classList.remove("hidden");
   elements.descriptionInput.focus();
@@ -1680,6 +1756,7 @@ function resetForm() {
   elements.transactionId.value = "";
   elements.dateInput.value = getTodayInputValue();
   elements.formTitle.textContent = "Tambah Manual";
+  document.querySelector("#quickEntryTitle").textContent = "Tambah transaksi";
   elements.saveButton.textContent = "Simpan Transaksi";
   elements.cancelEditButton.classList.add("hidden");
 }
@@ -1698,9 +1775,15 @@ function renderTotals() {
   elements.expenseTotal.textContent = formatCurrency(totals.expense);
   elements.balanceTotal.textContent = formatCurrency(totals.balance);
   const periodLabel = getActiveMonthLabel();
-  elements.incomeTotal.closest(".metric-card").title = `Total pemasukan ${periodLabel}: ${formatCurrency(totals.income)}`;
-  elements.expenseTotal.closest(".metric-card").title = `Total pengeluaran ${periodLabel}: ${formatCurrency(totals.expense)}`;
-  elements.balanceTotal.closest(".metric-card").title = `Saldo bersih ${periodLabel}: ${formatCurrency(totals.balance)}`;
+  document.querySelector("#periodLabel").textContent = periodLabel;
+  document.querySelector("#transactionTotal").textContent = String(transactions.length);
+  elements.showAllMonthsButton.setAttribute("aria-pressed", String(!state.filters.month));
+  elements.incomeTotal.closest(".metric-card").dataset.tooltip = `Pemasukan ${periodLabel}: ${formatCurrency(totals.income)}`;
+  elements.expenseTotal.closest(".metric-card").dataset.tooltip = `Pengeluaran ${periodLabel}: ${formatCurrency(totals.expense)}`;
+  elements.balanceTotal.closest(".metric-card").dataset.tooltip = `${formatCurrency(totals.income)} masuk - ${formatCurrency(totals.expense)} keluar = ${formatCurrency(totals.balance)}`;
+  document.querySelector('#transactionTotal').closest('.metric-card').dataset.tooltip = `${transactions.filter(item => item.type === 'income').length} pemasukan dan ${transactions.filter(item => item.type === 'expense').length} pengeluaran pada ${periodLabel}`;
+  window.DashboardUI.animateUpdate(document.querySelector('.summary-grid'), 'overview');
+  [elements.incomeTotal, elements.expenseTotal, elements.balanceTotal, document.querySelector('#transactionTotal')].forEach(element => window.DashboardUI.animateUpdate(element));
 }
 
 function renderCategoryOptions() {
@@ -1735,18 +1818,17 @@ function renderCategorySummary() {
   renderCategoryBars(selectedCategory);
   renderTrendChart(selectedCategory);
   renderDailyExpenseChart(selectedCategory);
+  window.DashboardUI.animateUpdate(elements.categoryBars, 'cards');
+  window.DashboardUI.animateUpdate(elements.trendChart, 'chart');
+  window.DashboardUI.animateUpdate(elements.dailyExpenseChart, 'chart');
 }
 
 function renderCategoryBars(selectedCategory) {
   const grouped = new Map();
-  const monthTransactions = getMonthFilteredTransactions();
-  const source = selectedCategory === "all"
-    ? monthTransactions
-    : monthTransactions.filter((item) => item.category === selectedCategory);
-
-  source.forEach((item) => {
-    const current = grouped.get(item.category) || { income: 0, expense: 0 };
+  getMonthFilteredTransactions().forEach((item) => {
+    const current = grouped.get(item.category) || { income: 0, expense: 0, count: 0 };
     current[item.type] += item.amount;
+    current.count += 1;
     grouped.set(item.category, current);
   });
 
@@ -1754,7 +1836,7 @@ function renderCategoryBars(selectedCategory) {
     .map(([category, totals]) => ({
       category,
       ...totals,
-      activity: totals.expense || totals.income,
+      activity: totals.expense + totals.income,
     }))
     .sort((a, b) => b.activity - a.activity);
 
@@ -1763,29 +1845,44 @@ function renderCategoryBars(selectedCategory) {
     return;
   }
 
-  const categoryRows = buildCategorySummaryRows(rows);
-  const total = categoryRows.reduce((sum, row) => sum + row.activity, 0) || 1;
+  const total = rows.reduce((sum, row) => sum + row.activity, 0) || 1;
 
   elements.categoryBars.innerHTML = `
     <div class="category-number-list">
-      ${categoryRows.map((row) => {
-        const percent = Math.round((row.activity / total) * 100);
+      ${rows.map((row) => {
+        const share = (row.activity / total) * 100;
+        const percent = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(share);
         return `
-          <button class="category-number-row interactive-row" type="button" style="--activity-share: ${Math.max(percent, 8)}%;" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category}: ${formatCurrency(row.activity)}`)}">
-            <span class="category-name">${escapeHtml(row.category)}</span>
+          <button class="category-number-row" type="button" style="--activity-share: ${share}%;" data-category="${escapeHtml(row.category)}" data-tooltip="${escapeHtml(`${row.category} | ${row.count} transaksi, ${percent}% arus dana | Saldo ${formatCurrency(row.income - row.expense)}`)}" aria-pressed="${row.category === selectedCategory}">
+            <span class="category-card-top"><span class="category-name">${escapeHtml(row.category)}</span>${window.DashboardUI.icon(getCategoryIcon(row.category))}</span>
             <span class="category-values">
               <strong>${formatCurrency(row.activity)}</strong>
-              <small>${percent}% aktivitas</small>
+              <small>${row.count} transaksi &middot; ${percent}% arus dana</small>
             </span>
             <span class="category-breakdown">
-              <span>Masuk ${formatCompactCurrency(row.income)}</span>
-              <span>Keluar ${formatCompactCurrency(row.expense)}</span>
+              <span><em>Masuk</em><b class="income">${formatCurrency(row.income)}</b></span>
+              <span><em>Keluar</em><b class="expense">${formatCurrency(row.expense)}</b></span>
             </span>
+            <span class="category-rail" aria-hidden="true"><i></i></span>
           </button>
         `;
       }).join("")}
     </div>
   `;
+  window.DashboardUI.refreshIcons();
+}
+
+function getCategoryIcon(category) {
+  const value = category.toLowerCase();
+  if (/gaji|bonus|pendapatan/.test(value)) return "banknote";
+  if (/makan|minum|konsumsi/.test(value)) return "utensils";
+  if (/transport|kendaraan/.test(value)) return "train-front";
+  if (/cicilan|rumah/.test(value)) return "house";
+  if (/tabungan|investasi/.test(value)) return "landmark";
+  if (/utilitas|langganan/.test(value)) return "receipt";
+  if (/donasi|hadiah|sosial/.test(value)) return "gift";
+  if (/belanja/.test(value)) return "shopping-bag";
+  return "folder";
 }
 
 function handleCategoryChartClick(event) {
@@ -1795,26 +1892,9 @@ function handleCategoryChartClick(event) {
   const category = target.dataset.category;
   if (!category || ![...elements.categorySummarySelect.options].some((option) => option.value === category)) return;
 
-  elements.categorySummarySelect.value = category;
+  elements.categorySummarySelect.value = elements.categorySummarySelect.value === category ? "all" : category;
   renderCategorySummary();
-}
-
-function buildCategorySummaryRows(rows) {
-  if (rows.length <= 7) return rows;
-
-  const visibleRows = rows.slice(0, 6);
-  const otherRows = rows.slice(6);
-  const otherTotals = otherRows.reduce((totals, row) => {
-    totals.income += row.income;
-    totals.expense += row.expense;
-    totals.activity += row.activity;
-    return totals;
-  }, { income: 0, expense: 0, activity: 0 });
-
-  return [
-    ...visibleRows,
-    { category: "Kategori Lainnya", ...otherTotals },
-  ];
+  renderTable();
 }
 
 function handleTrendModeChange(event) {
@@ -1824,8 +1904,15 @@ function handleTrendModeChange(event) {
   state.trendMode = button.dataset.trendMode;
   [...elements.trendModeButtons.querySelectorAll("button")].forEach((item) => {
     item.classList.toggle("is-active", item === button);
+    item.setAttribute("aria-pressed", String(item === button));
   });
   renderCategorySummary();
+}
+
+function getChartLayout() {
+  return window.matchMedia('(max-width: 600px)').matches
+    ? { width: 360, height: 240, pad: { top: 28, right: 28, bottom: 38, left: 30 } }
+    : { width: 640, height: 260, pad: { top: 24, right: 24, bottom: 42, left: 58 } };
 }
 
 function renderTrendChart(selectedCategory) {
@@ -1840,53 +1927,49 @@ function renderTrendChart(selectedCategory) {
     return;
   }
 
-  const width = 640;
-  const height = 260;
-  const pad = { top: 24, right: 24, bottom: 42, left: 58 };
+  const { width, height, pad } = getChartLayout();
   const chartWidth = width - pad.left - pad.right;
   const chartHeight = height - pad.top - pad.bottom;
   const maxValue = Math.max(...points.flatMap((point) => [point.income, point.expense]), 1);
   const xStep = points.length > 1 ? chartWidth / (points.length - 1) : 0;
   const y = (value) => pad.top + chartHeight - (value / maxValue) * chartHeight;
   const x = (index) => pad.left + (points.length === 1 ? chartWidth / 2 : index * xStep);
-  const incomePath = buildSmoothPath(points.map((point, index) => ({ x: x(index), y: y(point.income) })));
-  const expensePath = buildSmoothPath(points.map((point, index) => ({ x: x(index), y: y(point.expense) })));
+  const incomePath = buildLinePath(points.map((point, index) => ({ x: x(index), y: y(point.income) })));
+  const expensePath = buildLinePath(points.map((point, index) => ({ x: x(index), y: y(point.expense) })));
   const labelIndexes = getChartLabelIndexes(points.length);
   const latest = points[points.length - 1];
 
   elements.trendChart.innerHTML = `
     <div class="trend-summary">
-      <div class="interactive-card" data-tooltip="Periode terakhir yang tampil di grafik">
+      <div class="interactive-card" tabindex="0" data-tooltip="Periode terakhir yang tampil di grafik">
         <span>Periode terbaru</span>
         <strong>${escapeHtml(latest.label)}</strong>
       </div>
-      <div class="interactive-card" data-tooltip="Pemasukan periode terakhir: ${escapeHtml(formatCurrency(latest.income))}">
+      <div class="interactive-card" tabindex="0" data-tooltip="Pemasukan periode terakhir: ${escapeHtml(formatCurrency(latest.income))}">
         <span>Pemasukan</span>
         <strong>${formatCompactCurrency(latest.income)}</strong>
       </div>
-      <div class="interactive-card" data-tooltip="Pengeluaran periode terakhir: ${escapeHtml(formatCurrency(latest.expense))}">
+      <div class="interactive-card" tabindex="0" data-tooltip="Pengeluaran periode terakhir: ${escapeHtml(formatCurrency(latest.expense))}">
         <span>Pengeluaran</span>
         <strong>${formatCompactCurrency(latest.expense)}</strong>
       </div>
     </div>
     <div class="trend-chart-wrap">
-      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafik tren transaksi">
+      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="Grafik tren transaksi">
         <line class="axis-line" x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${width - pad.right}" y2="${pad.top + chartHeight}"></line>
         <line class="axis-line" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}"></line>
         ${[0.25, 0.5, 0.75, 1].map((ratio) => {
           const gridY = pad.top + chartHeight - ratio * chartHeight;
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
-        <path class="trend-line-glow income-glow" d="${incomePath}"></path>
-        <path class="trend-line-glow expense-glow" d="${expensePath}"></path>
         <path class="trend-line income-line" d="${incomePath}"></path>
         <path class="trend-line expense-line" d="${expensePath}"></path>
         ${points.map((point, index) => `
-          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
+          <g class="trend-point" tabindex="0" role="button" aria-label="${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}" data-tooltip="${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
             <title>${escapeHtml(`${point.label} | Pemasukan ${formatCurrency(point.income)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
-            <circle class="trend-dot-halo income-halo" cx="${x(index)}" cy="${y(point.income)}" r="${index === points.length - 1 ? 9 : 7}"></circle>
+            <circle class="chart-hit-target" cx="${x(index)}" cy="${y(point.income)}" r="${width === 360 ? 28 : 12}" aria-hidden="true"></circle>
+            <circle class="chart-hit-target" cx="${x(index)}" cy="${y(point.expense)}" r="${width === 360 ? 28 : 12}" aria-hidden="true"></circle>
             <circle class="trend-dot income-dot ${index === points.length - 1 ? "latest-dot" : ""}" cx="${x(index)}" cy="${y(point.income)}" r="${index === points.length - 1 ? 5.5 : 4.4}"></circle>
-            <circle class="trend-dot-halo expense-halo" cx="${x(index)}" cy="${y(point.expense)}" r="${index === points.length - 1 ? 9 : 7}"></circle>
             <circle class="trend-dot expense-dot ${index === points.length - 1 ? "latest-dot" : ""}" cx="${x(index)}" cy="${y(point.expense)}" r="${index === points.length - 1 ? 5.5 : 4.4}"></circle>
           </g>
         `).join("")}
@@ -1900,6 +1983,7 @@ function renderTrendChart(selectedCategory) {
       <span><i class="legend-dot income-dot"></i>Pemasukan</span>
       <span><i class="legend-dot expense-dot"></i>Pengeluaran</span>
     </div>
+    ${renderChartDataTable(points, "periode")}
   `;
 }
 
@@ -1922,9 +2006,7 @@ function renderDailyExpenseChart(selectedCategory) {
     return;
   }
 
-  const width = 640;
-  const height = 240;
-  const pad = { top: 24, right: 24, bottom: 42, left: 58 };
+  const { width, height, pad } = getChartLayout();
   const chartWidth = width - pad.left - pad.right;
   const chartHeight = height - pad.top - pad.bottom;
   const maxValue = Math.max(...points.map((point) => point.expense), 1);
@@ -1939,7 +2021,7 @@ function renderDailyExpenseChart(selectedCategory) {
     return;
   }
 
-  const linePath = buildSmoothPath(activePoints.map((point) => ({ x: x(point.index), y: y(point.expense) })));
+  const linePath = buildLinePath(activePoints.map((point) => ({ x: x(point.index), y: y(point.expense) })));
   const labelIndexes = getChartLabelIndexes(points.length);
   const totalExpense = points.reduce((sum, point) => sum + point.expense, 0);
   const activeDays = points.filter((point) => point.expense > 0).length;
@@ -1947,33 +2029,32 @@ function renderDailyExpenseChart(selectedCategory) {
 
   elements.dailyExpenseChart.innerHTML = `
     <div class="trend-summary">
-      <div class="interactive-card" data-tooltip="Total pengeluaran harian pada ${escapeHtml(formatMonthLabel(activeMonth))}">
+      <div class="interactive-card" tabindex="0" data-tooltip="Pengeluaran ${escapeHtml(formatMonthLabel(activeMonth))}: ${escapeHtml(formatCurrency(totalExpense))}">
         <span>Total Pengeluaran</span>
         <strong>${formatCompactCurrency(totalExpense)}</strong>
       </div>
-      <div class="interactive-card" data-tooltip="Jumlah hari yang memiliki transaksi pengeluaran">
+      <div class="interactive-card" tabindex="0" data-tooltip="${activeDays} hari memiliki transaksi pengeluaran pada ${escapeHtml(formatMonthLabel(activeMonth))}">
         <span>Hari Aktif</span>
         <strong>${activeDays}</strong>
       </div>
-      <div class="interactive-card" data-tooltip="Pengeluaran tertinggi: ${escapeHtml(formatCurrency(peak.expense))}">
+      <div class="interactive-card" tabindex="0" data-tooltip="${escapeHtml(`${peak.label} ${formatMonthLabel(activeMonth)} | Pengeluaran tertinggi ${formatCurrency(peak.expense)}`)}">
         <span>Puncak Harian</span>
         <strong>${escapeHtml(peak.label)}</strong>
       </div>
     </div>
     <div class="trend-chart-wrap">
-      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafik pengeluaran harian">
+      <svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="Grafik pengeluaran harian">
         <line class="axis-line" x1="${pad.left}" y1="${pad.top + chartHeight}" x2="${width - pad.right}" y2="${pad.top + chartHeight}"></line>
         <line class="axis-line" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartHeight}"></line>
         ${[0.25, 0.5, 0.75, 1].map((ratio) => {
           const gridY = pad.top + chartHeight - ratio * chartHeight;
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
-        <path class="trend-line-glow expense-glow" d="${linePath}"></path>
         <path class="trend-line expense-line" d="${linePath}"></path>
         ${activePoints.map((point, activeIndex) => `
-          <g class="trend-point" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
+          <g class="trend-point" tabindex="0" role="button" aria-label="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
             <title>${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
-            <circle class="trend-dot-halo expense-halo" cx="${x(point.index)}" cy="${y(point.expense)}" r="${activeIndex === activePoints.length - 1 ? 9 : 7}"></circle>
+            <circle class="chart-hit-target" cx="${x(point.index)}" cy="${y(point.expense)}" r="${width === 360 ? 28 : 12}" aria-hidden="true"></circle>
             <circle class="trend-dot expense-dot ${activeIndex === activePoints.length - 1 ? "latest-dot" : ""}" cx="${x(point.index)}" cy="${y(point.expense)}" r="${activeIndex === activePoints.length - 1 ? 5.5 : 4.4}"></circle>
           </g>
         `).join("")}
@@ -1986,7 +2067,13 @@ function renderDailyExpenseChart(selectedCategory) {
     <div class="trend-legend">
       <span><i class="legend-dot expense-dot"></i>Pengeluaran harian</span>
     </div>
+    ${renderChartDataTable(points, "tanggal")}
   `;
+}
+
+function renderChartDataTable(points, unit) {
+  const hasIncome = points.some((point) => point.income !== undefined);
+  return `<details class="chart-details"><summary>Lihat angka per ${unit}</summary><table><thead><tr><th>${unit === "periode" ? "Periode" : "Tanggal"}</th>${hasIncome ? "<th>Pemasukan</th>" : ""}<th>Pengeluaran</th></tr></thead><tbody>${points.map((point) => `<tr><td>${escapeHtml(point.label)}</td>${hasIncome ? `<td>${formatCurrency(point.income)}</td>` : ""}<td>${formatCurrency(point.expense)}</td></tr>`).join("")}</tbody></table></details>`;
 }
 
 function buildTrendPoints(transactions, mode) {
@@ -2004,28 +2091,8 @@ function buildTrendPoints(transactions, mode) {
     .slice(-12);
 }
 
-function buildSmoothPath(points) {
-  if (!points.length) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-
-  const commands = [`M ${points[0].x} ${points[0].y}`];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const current = points[index];
-    const next = points[index + 1];
-    const previous = points[index - 1] || current;
-    const afterNext = points[index + 2] || next;
-    const cp1 = {
-      x: current.x + (next.x - previous.x) / 6,
-      y: current.y + (next.y - previous.y) / 6,
-    };
-    const cp2 = {
-      x: next.x - (afterNext.x - current.x) / 6,
-      y: next.y - (afterNext.y - current.y) / 6,
-    };
-    commands.push(`C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${next.x} ${next.y}`);
-  }
-  return commands.join(" ");
+function buildLinePath(points) {
+  return points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
 }
 
 function buildDailyExpensePoints(transactions, monthValue) {
@@ -2080,14 +2147,15 @@ function getChartLabelIndexes(length) {
 
 function renderTable() {
   const rows = getFilteredTransactions();
+  document.querySelector("#transactionCount").textContent = `(${rows.length})`;
 
   elements.emptyState.classList.toggle("hidden", rows.length > 0);
   elements.transactionRows.innerHTML = groupTransactionsByDate(rows).map((group) => `
     <tr class="date-group-row">
-      <td colspan="6">
+      <td colspan="4">
         <div class="date-group-heading">
           <div>
-            <span>${formatDate(group.date)}</span>
+            <span>${escapeHtml(formatDate(group.date))}</span>
             <strong>${group.items.length} transaksi</strong>
           </div>
           <div class="date-group-totals">
@@ -2099,25 +2167,27 @@ function renderTable() {
     </tr>
     ${group.items.map((item) => `
       <tr class="transaction-row">
-        <td></td>
-        <td data-label="Jenis"><span class="type-pill ${item.type}">${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
-        <td data-label="Kategori">${escapeHtml(item.category)}</td>
-        <td data-label="Deskripsi">${escapeHtml(item.description)}</td>
+        <td data-label="Transaksi"><span class="transaction-description">${escapeHtml(item.description)}</span><span class="transaction-category">${escapeHtml(item.category)}</span></td>
+        <td data-label="Jenis"><span class="type-pill ${item.type}">${window.DashboardUI.icon(item.type === "income" ? "arrow-down-left" : "arrow-up-right")}${item.type === "income" ? "Pemasukan" : "Pengeluaran"}</span></td>
         <td class="numeric" data-label="Nominal">${formatCurrency(item.amount)}</td>
         <td data-label="Aksi">
           <div class="row-actions">
-            <button class="icon-button" type="button" title="Edit transaksi" data-action="edit" data-id="${item.id}">Edit</button>
-            <button class="icon-button delete" type="button" title="Hapus transaksi" data-action="delete" data-id="${item.id}">Del</button>
+            <button class="icon-button" type="button" title="Edit transaksi" aria-label="Edit ${escapeHtml(item.description)}" data-action="edit" data-id="${escapeHtml(item.id)}">${window.DashboardUI.icon("pencil")}</button>
+            <button class="icon-button delete" type="button" title="Hapus transaksi" aria-label="Hapus ${escapeHtml(item.description)}" data-action="delete" data-id="${escapeHtml(item.id)}">${window.DashboardUI.icon("trash-2")}</button>
           </div>
         </td>
       </tr>
     `).join("")}
   `).join("");
+  window.DashboardUI.refreshIcons();
+  window.DashboardUI.animateUpdate(elements.transactionRows);
 }
 
 function getFilteredTransactions() {
   return getMonthFilteredTransactions()
     .filter((item) => {
+      const category = elements.categorySummarySelect.value;
+      if (category !== "all" && item.category !== category) return false;
       if (state.filters.date && item.date !== state.filters.date) return false;
       if (!state.filters.search) return true;
 
@@ -2512,10 +2582,14 @@ function buildExportRows() {
   ];
 }
 
-function clearAllData() {
+async function clearAllData() {
   if (!state.transactions.length) return;
 
-  const confirmed = confirm("Hapus semua transaksi yang tersimpan di perangkat ini?");
+  const confirmed = await window.DashboardUI.confirm({
+    title: "Hapus seluruh history?",
+    message: `${state.transactions.length} transaksi di workspace ${state.workspaceId} akan dihapus, termasuk history bulan sebelumnya${state.isLocalOnly ? " dari browser ini" : " dari penyimpanan online dan browser ini"}. Export backup sebelum melanjutkan.`,
+    accept: "Hapus semua", danger: true,
+  });
   if (!confirmed) return;
 
   state.transactions = [];
@@ -2647,6 +2721,10 @@ function updateStorageStatus(label, title) {
   elements.storageStatus.textContent = label;
   elements.storageStatus.title = title || label;
   elements.storageStatus.dataset.mode = state.storageMode;
+  const notice = document.querySelector("#storageNotice");
+  const offline = state.storageMode === "local" && !state.isLocalOnly;
+  notice.classList.toggle("hidden", !offline);
+  notice.textContent = offline ? `${title || "Penyimpanan online belum tersedia."} Perubahan tetap dicadangkan di browser ini; belum tersinkronkan ke server.` : "";
   if (elements.workspaceBadge) {
     elements.workspaceBadge.textContent = state.workspaceId || "Lokal";
   }
@@ -2663,7 +2741,7 @@ function sanitizeWorkspaceId(value) {
 function applySavedTheme() {
   const savedTheme = localStorage.getItem(THEME_KEY);
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const theme = savedTheme || (prefersDark ? "dark" : "light");
+  const theme = ["dark", "light"].includes(savedTheme) ? savedTheme : (prefersDark ? "dark" : "light");
   document.documentElement.dataset.theme = theme;
   updateThemeButton(theme);
 }
@@ -2676,7 +2754,21 @@ function toggleTheme() {
 }
 
 function updateThemeButton(theme) {
-  elements.themeToggle.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+  const icon = theme === "dark" ? "sun" : "moon";
+  const label = theme === "dark" ? "Tema terang" : "Tema gelap";
+  elements.themeToggle.innerHTML = `${window.DashboardUI.icon(icon)}<span>${label}</span>`;
+  const quick = document.querySelector("#themeQuickButton");
+  quick.innerHTML = window.DashboardUI.icon(icon);
+  quick.setAttribute("aria-label", label);
+  quick.title = label;
+  window.DashboardUI.refreshIcons();
+}
+
+function followTransactionPeriod(date) {
+  if (!state.filters.month || date.startsWith(state.filters.month)) return;
+  state.filters.month = date.slice(0, 7);
+  elements.monthFilterInput.value = state.filters.month;
+  clearDateFilter();
 }
 
 function escapeHtml(value) {

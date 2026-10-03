@@ -1,552 +1,151 @@
 <!doctype html>
 <html lang="id">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Catatan Keuangan</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f1220'/%3E%3Cpath d='M16 18h32v28H16z' fill='%23f5b82e'/%3E%3Cpath d='M24 18v28M40 18v28M16 29h32M16 37h32' stroke='%230f1220' stroke-width='4'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="styles.css?v=20260708-category-rail-fix" />
-  </head>
-  <body>
-    <section class="login-screen" id="loginScreen">
-      <form class="login-card" id="loginForm">
-        <p class="eyebrow">Private workspace</p>
-        <h1>Masuk Catatan Keuangan</h1>
-        <p class="login-copy">Gunakan nama workspace dan token Netlify agar data kamu tersimpan di ruang database yang terpisah.</p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#176448" />
+  <title>Catatan Keuangan</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23176448'/%3E%3Cpath d='M7 10h18v13H7zM7 14h18' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='21' cy='18' r='1' fill='white'/%3E%3C/svg%3E" />
+  <link rel="preload" href="vendor/fonts/ibm-plex-sans-400.ttf" as="font" type="font/ttf" crossorigin />
+  <link rel="stylesheet" href="styles.css?v=20261004-motion" />
+</head>
+<body>
+  <a class="skip-link" href="#overview">Lewati navigasi</a>
+  <section class="login-screen" id="loginScreen">
+    <form class="login-card" id="loginForm">
+      <i data-lucide="wallet" class="login-mark" aria-hidden="true"></i>
+      <h1>Catatan Keuangan</h1>
+      <p class="muted">Masuk ke workspace keuangan Anda.</p>
+      <label>Workspace<input id="workspaceInput" type="text" autocomplete="username" placeholder="Nama workspace" required /></label>
+      <label>Access token<input id="accessTokenInput" type="password" autocomplete="current-password" placeholder="Token workspace" required /></label>
+      <button class="button primary" type="submit">Masuk online<i data-lucide="arrow-right" aria-hidden="true"></i></button>
+      <button class="button secondary" id="localModeButton" type="button">Pakai mode lokal</button>
+      <p class="status-text" id="loginStatus" role="status">Token disimpan hanya di browser perangkat ini.</p>
+    </form>
+  </section>
 
-        <label>
-          Workspace
-          <input id="workspaceInput" type="text" autocomplete="username" placeholder="contoh: keluarga-ando" required />
-        </label>
+  <main class="app-shell hidden" id="appShell">
+    <header class="topbar">
+      <button class="icon-button" id="toolsPanelButton" type="button" aria-controls="toolsPanel" aria-expanded="false" aria-label="Buka menu data" title="Menu data"><i data-lucide="menu" aria-hidden="true"></i></button>
+      <div class="brand-lockup"><i data-lucide="wallet" class="brand-mark" aria-hidden="true"></i><div><h1>Catatan Keuangan</h1><p class="storage-status" id="storageStatus" role="status">Mode lokal</p></div></div>
+      <div id="topbarSearchHost"><label class="global-search" id="globalSearch"><i data-lucide="search" aria-hidden="true"></i><span class="sr-only">Cari transaksi</span><input id="globalSearchInput" type="search" placeholder="Cari transaksi..." /></label></div>
+      <div class="topbar-profile"><span class="profile-avatar" aria-hidden="true">CK</span><span id="workspaceBadge">Lokal</span></div>
+      <button class="icon-button" id="themeQuickButton" type="button" title="Ganti tema" aria-label="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
+      <button class="icon-button logout-button" id="logoutButton" type="button" title="Keluar dari workspace" aria-label="Keluar dari workspace"><i data-lucide="log-out" aria-hidden="true"></i></button>
+    </header>
+    <nav class="main-nav" aria-label="Navigasi dashboard">
+      <a href="#overview"><i data-lucide="layout-dashboard" aria-hidden="true"></i>Ringkasan</a>
+      <a href="#quickEntryModal" id="navQuickEntryButton"><i data-lucide="plus" aria-hidden="true"></i>Catat</a>
+      <a href="#categoryPanel"><i data-lucide="layers" aria-hidden="true"></i>Kategori</a>
+      <a href="#trendSection"><i data-lucide="chart-no-axes-combined" aria-hidden="true"></i>Tren</a>
+      <a href="#transactionsSection" id="navTransactionsButton"><i data-lucide="list" aria-hidden="true"></i>Transaksi</a>
+    </nav>
 
-        <label>
-          Access token
-          <input id="accessTokenInput" type="password" autocomplete="current-password" placeholder="APP_ACCESS_TOKEN dari Netlify" required />
-        </label>
-
-        <button class="button primary" type="submit">Masuk Online</button>
-        <button class="button secondary" id="localModeButton" type="button">Pakai Mode Lokal</button>
-        <p class="status-text" id="loginStatus">Token tidak disimpan di server aplikasi, hanya di browser perangkat ini.</p>
-      </form>
-    </section>
-
-    <main class="app-shell hidden" id="appShell">
-      <header class="topbar">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <h1>Catatan Keuangan</h1>
-            <p class="storage-status" id="storageStatus">Mode Lokal</p>
-          </div>
+    <div class="dashboard-content">
+      <section id="overview" class="overview-section" aria-label="Ringkasan periode">
+        <div class="section-heading period-toolbar">
+          <div><p class="eyebrow">Ringkasan keuangan</p><h2 id="periodLabel">Bulan aktif</h2></div>
+          <div class="period-controls"><label class="compact-filter">Periode<input id="monthFilterInput" type="month" /></label><button class="button secondary" id="showAllMonthsButton" type="button" aria-pressed="false">Semua bulan</button></div>
         </div>
-        <label class="global-search" aria-label="Cari transaksi">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="m21 21-4.2-4.2" />
-            <circle cx="11" cy="11" r="7" />
-          </svg>
-          <input id="globalSearchInput" type="search" placeholder="Cari transaksi, kategori, atau deskripsi..." />
-        </label>
-        <div class="topbar-profile">
-          <span class="profile-avatar" aria-hidden="true">CK</span>
-          <div>
-            <strong>Workspace</strong>
-            <small id="workspaceBadge">Lokal</small>
-          </div>
-        </div>
-        <div class="topbar-actions" aria-label="Aksi cepat">
-          <button class="button secondary tools-toggle" id="toolsPanelButton" type="button" aria-controls="toolsPanel" aria-expanded="false" aria-label="Buka menu data">
-            <span class="burger-mark" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </button>
-          <button class="button logout-button" id="logoutButton" type="button" title="Keluar dari workspace" aria-label="Keluar dari workspace">
-            <svg class="logout-icon" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M10 6H6v12h4" />
-              <path d="M14 8l4 4-4 4" />
-              <path d="M8 12h10" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <nav class="main-nav" aria-label="Navigasi dashboard">
-        <a href="#appShell">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h7v7H4z" /><path d="M13 4h7v7h-7z" /><path d="M4 13h7v7H4z" /><path d="M13 13h7v7h-7z" /></svg>
-          Dashboard
-        </a>
-        <a href="#quickEntryModal" id="navQuickEntryButton">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
-          Catat
-        </a>
-        <a href="#categoryPanel">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h10" /><path d="M4 17h7" /></svg>
-          Kategori
-        </a>
-        <a href="#trendSection">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18 9 12l4 3 7-9" /></svg>
-          Tren
-        </a>
-        <a href="#transactionsSection">
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 5h12" /><path d="M6 12h12" /><path d="M6 19h12" /></svg>
-          Transaksi
-        </a>
-      </nav>
-
-      <aside class="tools-panel" id="toolsPanel" aria-hidden="true">
-        <div class="tools-panel-card" role="dialog" aria-label="Menu data">
-          <div class="tools-panel-heading">
-            <div>
-              <p class="eyebrow">Menu data</p>
-              <h2>Aksi & Tampilan</h2>
-            </div>
-            <button class="icon-button drawer-close-button" id="closeToolsPanelButton" type="button" aria-label="Tutup menu data">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M6 6l12 12" />
-                <path d="M18 6L6 18" />
-              </svg>
-            </button>
-          </div>
-          <div class="tools-panel-actions">
-          <label class="button secondary file-button bank-file-button" title="Baca mutasi bank dengan AI">
-            <span class="tool-action-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 10h16" />
-                <path d="M5 10 12 5l7 5" />
-                <path d="M7 10v7" />
-                <path d="M12 10v7" />
-                <path d="M17 10v7" />
-                <path d="M4 20h16" />
-              </svg>
-            </span>
-            Mutasi Bank AI
-            <input id="bankStatementInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.xls" hidden />
-          </label>
-          <label class="button secondary file-button" title="Import transaksi dari Excel atau CSV backup">
-            <span aria-hidden="true">IMP</span>
-            Import File
-            <input id="importExcelInput" type="file" accept=".xlsx,.xls,.csv" hidden />
-          </label>
-          <button class="button secondary" id="exportCsvButton" type="button" title="Export CSV untuk Google Sheets">
-            <span aria-hidden="true">CSV</span>
-            Google Sheets
-          </button>
-          <button class="button secondary" id="exportExcelButton" type="button" title="Export file Excel">
-            <span aria-hidden="true">XLS</span>
-            Excel
-          </button>
-          <button class="button danger" id="clearButton" type="button" title="Hapus semua data lokal">
-            Hapus Data
-          </button>
-          <button class="button theme-toggle" id="themeToggle" type="button" title="Ganti mode terang/gelap">
-            Dark Mode
-          </button>
-          </div>
-        </div>
-      </aside>
-
-      <section class="period-toolbar" aria-label="Filter periode laporan">
-        <div>
-          <p class="eyebrow">Periode</p>
-          <h2>Bulan Aktif</h2>
-        </div>
-        <div class="period-controls">
-          <label class="compact-filter">
-            Pilih Bulan
-            <input id="monthFilterInput" type="month" />
-          </label>
-          <button class="button secondary" id="showAllMonthsButton" type="button">Semua Bulan</button>
+        <p class="status-banner storage-notice hidden" id="storageNotice" role="status"></p>
+        <div class="summary-grid" aria-label="Ringkasan keuangan">
+          <article class="metric-card income" tabindex="0"><div class="metric-card-top"><span>Pemasukan</span><i data-lucide="banknote" aria-hidden="true"></i></div><strong id="incomeTotal">Rp0</strong><small>Total pada periode ini</small></article>
+          <article class="metric-card expense" tabindex="0"><div class="metric-card-top"><span>Pengeluaran</span><i data-lucide="hand-coins" aria-hidden="true"></i></div><strong id="expenseTotal">Rp0</strong><small>Total pada periode ini</small></article>
+          <article class="metric-card balance" tabindex="0"><div class="metric-card-top"><span>Saldo bersih</span><i data-lucide="landmark" aria-hidden="true"></i></div><strong id="balanceTotal">Rp0</strong><small>Pemasukan dikurangi pengeluaran</small></article>
+          <article class="metric-card" tabindex="0"><div class="metric-card-top"><span>Transaksi</span><i data-lucide="list" aria-hidden="true"></i></div><strong id="transactionTotal">0</strong><small>Catatan pada periode ini</small></article>
         </div>
       </section>
-
-      <section class="summary-grid" aria-label="Ringkasan keuangan">
-        <article class="metric-card income">
-          <div class="metric-card-top">
-            <p>Total Pemasukan</p>
-            <span class="metric-glyph" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="3" y="6" width="18" height="12" rx="3" />
-                <path d="M7 10.5h2.2" />
-                <path d="M14.8 13.5H17" />
-                <circle cx="12" cy="12" r="2.8" />
-              </svg>
-            </span>
-          </div>
-          <strong id="incomeTotal">Rp0</strong>
-          <span class="metric-rail" aria-hidden="true"></span>
-        </article>
-        <article class="metric-card expense">
-          <div class="metric-card-top">
-            <p>Total Pengeluaran</p>
-            <span class="metric-glyph" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <rect x="5" y="7" width="13" height="10" rx="2.5" />
-                <path d="M3 10h4" />
-                <path d="M2 14h5" />
-                <path d="M17.5 6.5 21 4v4.5" />
-                <path d="M14.5 11.5h4.8" />
-                <circle cx="11.5" cy="12" r="2" />
-              </svg>
-            </span>
-          </div>
-          <strong id="expenseTotal">Rp0</strong>
-          <span class="metric-rail" aria-hidden="true"></span>
-        </article>
-        <article class="metric-card balance">
-          <div class="metric-card-top">
-            <p>Saldo Bersih</p>
-            <span class="metric-glyph" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 10h16" />
-                <path d="M5 10 12 5l7 5" />
-                <path d="M7 10v7" />
-                <path d="M12 10v7" />
-                <path d="M17 10v7" />
-                <path d="M5 17h14" />
-                <path d="M4 20h16" />
-              </svg>
-            </span>
-          </div>
-          <strong id="balanceTotal">Rp0</strong>
-          <span class="metric-rail" aria-hidden="true"></span>
-        </article>
-      </section>
-
-      <section class="modal-backdrop hidden" id="quickEntryModal" aria-modal="true" role="dialog" aria-labelledby="quickEntryTitle">
-        <div class="quick-entry-modal">
-          <div class="modal-heading">
-            <div>
-              <p class="eyebrow">Tambah transaksi</p>
-              <h2 id="quickEntryTitle">Tambah Transaksi</h2>
-            </div>
-            <button class="icon-button" id="closeQuickEntryButton" type="button" aria-label="Tutup catat cepat">X</button>
-          </div>
-
-          <form class="chat-form" id="chatForm">
-            <label>
-              Tulis atau ucapkan transaksi
-              <textarea id="chatInput" rows="3" placeholder="Contoh: belanja pizza tanggal 4 200000 kategori makanan"></textarea>
-            </label>
-            <div class="chat-actions">
-              <button class="button primary" type="submit">Buat Draft</button>
-              <button class="button secondary voice-button" id="voiceButton" type="button">Voice</button>
-            </div>
-          </form>
-          <p class="status-text" id="chatStatus">Aplikasi akan membuat draft dulu sebelum transaksi disimpan.</p>
-
-          <form class="draft-card hidden" id="draftCard" aria-live="polite">
-            <p class="eyebrow">Konfirmasi</p>
-            <h3>Edit jika perlu, lalu simpan</h3>
-            <div class="draft-grid">
-              <label>
-                Tanggal
-                <input id="draftDateInput" type="date" required />
-              </label>
-              <label>
-                Jenis
-                <select id="draftTypeInput" required>
-                  <option value="income">Pemasukan</option>
-                  <option value="expense">Pengeluaran</option>
-                </select>
-              </label>
-              <label>
-                Kategori
-                <input id="draftCategoryInput" list="categoryList" required />
-              </label>
-              <label>
-                Nominal
-                <input id="draftAmountInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required />
-              </label>
-              <label class="draft-description">
-                Keterangan
-                <input id="draftDescriptionInput" type="text" required />
-              </label>
-            </div>
-            <div class="draft-actions">
-              <button class="button primary" id="confirmDraftButton" type="button">Simpan Draft</button>
-              <button class="button secondary" id="editDraftButton" type="button">Pindah ke Form</button>
-              <button class="button ghost" id="cancelDraftButton" type="button">Batal</button>
-            </div>
-          </form>
-
-          <section class="modal-section">
-            <div class="modal-subheading">
-              <p class="eyebrow">Input manual</p>
-              <h3 id="formTitle">Tambah Manual</h3>
-            </div>
-
-            <form class="transaction-form manual-entry-form" id="transactionForm">
-              <input type="hidden" id="transactionId" />
-
-              <div class="manual-grid">
-                <label>
-                  Tanggal
-                  <input id="dateInput" name="date" type="date" required />
-                </label>
-
-                <label>
-                  Jenis
-                  <select id="typeInput" name="type" required>
-                    <option value="income">Pemasukan</option>
-                    <option value="expense">Pengeluaran</option>
-                  </select>
-                </label>
-
-                <label>
-                  Kategori
-                  <input id="categoryInput" name="category" list="categoryList" placeholder="Contoh: Gaji, Makan, Transport" required />
-                  <datalist id="categoryList"></datalist>
-                </label>
-
-                <label>
-                  Nominal
-                  <input id="amountInput" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required />
-                </label>
-
-                <label class="manual-description">
-                  Deskripsi
-                  <input id="descriptionInput" name="description" type="text" placeholder="Keterangan transaksi" required />
-                </label>
-              </div>
-
-              <div class="manual-actions">
-                <button class="button primary" id="saveButton" type="submit">Simpan Transaksi</button>
-                <button class="button ghost hidden" id="cancelEditButton" type="button">Batal Edit</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      </section>
-
-      <section class="modal-backdrop bank-import-backdrop hidden" id="bankImportModal" aria-modal="true" role="dialog" aria-labelledby="bankImportTitle">
-        <div class="bank-import-modal">
-          <div class="modal-heading bank-import-heading">
-            <div>
-              <p class="eyebrow">Impor mutasi bank</p>
-              <h2 id="bankImportTitle">Tinjau Hasil Agent</h2>
-              <p class="bank-import-file" id="bankImportFileName">Dokumen belum dipilih</p>
-            </div>
-            <button class="icon-button" id="closeBankImportButton" type="button" aria-label="Tutup impor mutasi bank">X</button>
-          </div>
-
-          <p class="status-text bank-import-status" id="bankImportStatus" aria-live="polite">
-            Agent akan membaca transaksi, bukan saldo awal atau saldo akhir. Periksa hasilnya sebelum menyimpan.
-          </p>
-
-          <div class="bank-import-summary" aria-label="Ringkasan hasil pembacaan dokumen">
-            <div>
-              <span>Dipilih</span>
-              <strong id="bankImportSelectedCount">0</strong>
-            </div>
-            <div class="income">
-              <span>Pemasukan</span>
-              <strong id="bankImportIncomeTotal">Rp0</strong>
-            </div>
-            <div class="expense">
-              <span>Pengeluaran</span>
-              <strong id="bankImportExpenseTotal">Rp0</strong>
-            </div>
-          </div>
-
-          <div class="bank-import-table-wrap">
-            <table class="bank-import-table">
-              <thead>
-                <tr>
-                  <th class="bank-select-column"><span class="sr-only">Pilih</span></th>
-                  <th>Tanggal</th>
-                  <th>Jenis</th>
-                  <th>Kategori</th>
-                  <th>Keterangan</th>
-                  <th class="numeric">Nominal</th>
-                  <th>Status</th>
-                  <th>Keyakinan</th>
-                </tr>
-              </thead>
-              <tbody id="bankImportRows"></tbody>
-            </table>
-          </div>
-
-          <div class="bank-import-footer">
-            <label class="bank-select-all">
-              <input id="bankImportSelectAll" type="checkbox" checked />
-              Pilih semua
-            </label>
-            <p class="bank-import-privacy">Dokumen diproses oleh provider AI yang dikonfigurasi di Netlify.</p>
-            <div class="bank-import-actions">
-              <button class="button ghost" id="cancelBankImportButton" type="button">Batal</button>
-              <button class="button primary" id="saveBankImportButton" type="button">Simpan Transaksi Terpilih</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel category-panel" id="categoryPanel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Kategori</p>
-            <h2>Ringkasan Pilihan</h2>
-          </div>
-        </div>
-
-        <label class="category-filter">
-          Tampilkan kategori
-          <select id="categorySummarySelect">
-            <option value="all">Semua kategori</option>
-          </select>
-        </label>
-
+      <div id="inlineEntryHost"></div>
+      <div class="charts-grid" id="trendSection">
+        <section class="trend-card" aria-label="Grafik pergerakan transaksi">
+          <div class="section-heading"><div><p class="eyebrow">Seluruh history</p><h2>Tren transaksi</h2></div><div class="segmented-control" id="trendModeButtons" aria-label="Periode grafik"><button class="is-active" type="button" data-trend-mode="monthly" aria-pressed="true">Bulanan</button><button type="button" data-trend-mode="quarterly" aria-pressed="false">Kuartal</button><button type="button" data-trend-mode="yearly" aria-pressed="false">Tahunan</button></div></div>
+          <div id="trendChart" class="chart-content"></div>
+        </section>
+        <section class="trend-card" aria-label="Grafik pengeluaran harian">
+          <div class="section-heading"><div><p class="eyebrow">Day-to-day</p><h2>Pengeluaran harian</h2></div><span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span></div>
+          <div id="dailyExpenseChart" class="chart-content"></div>
+        </section>
+      </div>
+      <section class="category-section" id="categoryPanel">
+        <div class="section-heading"><div><p class="eyebrow">Distribusi periode</p><h2>Ringkasan kategori</h2></div><label class="category-filter"><span class="sr-only">Tampilkan kategori</span><select id="categorySummarySelect"><option value="all">Semua kategori</option></select></label></div>
         <div class="category-stat-grid" aria-label="Ringkasan kategori terpilih">
-          <div class="interactive-card category-stat-tile income-tile">
-            <div class="category-stat-top">
-              <span>Pemasukan</span>
-              <i class="category-stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M4 7h16v10H4z" />
-                  <path d="M7 11h2" />
-                  <path d="M15 13h2" />
-                  <circle cx="12" cy="12" r="2.5" />
-                </svg>
-              </i>
-            </div>
-            <strong id="categoryIncome">Rp0</strong>
-            <b class="category-stat-rail" aria-hidden="true"></b>
-          </div>
-          <div class="interactive-card category-stat-tile expense-tile">
-            <div class="category-stat-top">
-              <span>Pengeluaran</span>
-              <i class="category-stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M6 8h12v9H6z" />
-                  <path d="M3 11h4" />
-                  <path d="M4 15h3" />
-                  <circle cx="12" cy="12.5" r="2" />
-                </svg>
-              </i>
-            </div>
-            <strong id="categoryExpense">Rp0</strong>
-            <b class="category-stat-rail" aria-hidden="true"></b>
-          </div>
-          <div class="interactive-card category-stat-tile balance-tile">
-            <div class="category-stat-top">
-              <span>Saldo</span>
-              <i class="category-stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M5 10h14" />
-                  <path d="M6 10 12 6l6 4" />
-                  <path d="M8 10v6" />
-                  <path d="M12 10v6" />
-                  <path d="M16 10v6" />
-                  <path d="M6 18h12" />
-                </svg>
-              </i>
-            </div>
-            <strong id="categoryBalance">Rp0</strong>
-            <b class="category-stat-rail" aria-hidden="true"></b>
-          </div>
-          <div class="interactive-card category-stat-tile count-tile">
-            <div class="category-stat-top">
-              <span>Transaksi</span>
-              <i class="category-stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M7 6h11" />
-                  <path d="M7 12h11" />
-                  <path d="M7 18h11" />
-                  <path d="M4 6h.01" />
-                  <path d="M4 12h.01" />
-                  <path d="M4 18h.01" />
-                </svg>
-              </i>
-            </div>
-            <strong id="categoryCount">0</strong>
-            <b class="category-stat-rail" aria-hidden="true"></b>
-          </div>
+          <div class="interactive-card income" tabindex="0"><span>Pemasukan</span><strong id="categoryIncome">Rp0</strong></div>
+          <div class="interactive-card expense" tabindex="0"><span>Pengeluaran</span><strong id="categoryExpense">Rp0</strong></div>
+          <div class="interactive-card balance" tabindex="0"><span>Saldo</span><strong id="categoryBalance">Rp0</strong></div>
+          <div class="interactive-card" tabindex="0"><span>Transaksi</span><strong id="categoryCount">0</strong></div>
         </div>
-
-        <div class="bar-list" id="categoryBars" aria-label="Rincian per kategori"></div>
-
-        <section class="trend-card" id="trendSection" aria-label="Grafik pergerakan transaksi">
-          <div class="trend-heading">
-            <div>
-              <p class="eyebrow">Pergerakan</p>
-              <h3>Tren Transaksi</h3>
-            </div>
-            <div class="segmented-control" id="trendModeButtons" aria-label="Pilih periode grafik">
-              <button class="is-active" type="button" data-trend-mode="monthly">MtM</button>
-              <button type="button" data-trend-mode="quarterly">QoQ</button>
-              <button type="button" data-trend-mode="yearly">YoY</button>
-            </div>
-          </div>
-          <div id="trendChart"></div>
-        </section>
-
-        <section class="trend-card daily-expense-card" aria-label="Grafik pengeluaran harian">
-          <div class="trend-heading">
-            <div>
-              <p class="eyebrow">Day-to-day</p>
-              <h3>Pengeluaran Harian</h3>
-            </div>
-            <span class="period-chip" id="dailyExpenseMonthLabel">Bulan aktif</span>
-          </div>
-          <div id="dailyExpenseChart"></div>
-        </section>
+        <div id="categoryBars" aria-label="Rincian per kategori"></div>
       </section>
+      <p class="status-banner hidden" id="importStatus" role="status"></p>
+      <div id="transactionsHost">
+        <section class="table-section" id="transactionsSection" aria-labelledby="transactionsTitle">
+          <div class="section-heading table-heading"><div><p class="eyebrow">Catatan per tanggal</p><h2 id="transactionsTitle">Detail transaksi <span class="count-label" id="transactionCount">0</span></h2></div><div class="filters"><label class="compact-filter">Tanggal<input id="filterDate" type="date" /></label><button class="button secondary" id="clearDateFilterButton" type="button" title="Hapus filter tanggal"><i data-lucide="calendar-days" aria-hidden="true"></i>Semua tanggal</button><button class="icon-button detail-close-button" id="closeDetailButton" type="button" aria-label="Tutup detail transaksi"><i data-lucide="x" aria-hidden="true"></i></button></div></div>
+          <div id="mobileSearchHost"></div>
+          <div class="table-wrap"><table class="ledger-table"><thead><tr><th>Transaksi</th><th>Jenis</th><th class="numeric">Nominal</th><th class="actions-column"><span class="sr-only">Aksi</span></th></tr></thead><tbody id="transactionRows"></tbody></table></div>
+          <div class="empty-state hidden" id="emptyState"><i data-lucide="search" aria-hidden="true"></i><p>Tidak ada transaksi pada pilihan ini.</p><button class="button secondary" id="resetTransactionFilters" type="button">Reset filter detail</button></div>
+        </section>
+      </div>
+      <footer class="app-footer"><span>Catatan Keuangan</span><span>powered by pangestufm</span></footer>
+    </div>
+  </main>
 
-      <p class="status-banner hidden" id="importStatus"></p>
+  <dialog class="drawer tools-panel" id="toolsPanel" aria-labelledby="toolsTitle">
+    <div class="tools-panel-card"><div class="modal-heading"><div><p class="eyebrow">Workspace</p><h2 id="toolsTitle">Data &amp; tampilan</h2></div><button class="icon-button" id="closeToolsPanelButton" type="button" aria-label="Tutup menu data"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="tools-panel-actions">
+        <p class="menu-label">Impor</p>
+        <button class="menu-button" id="bankUploadButton" type="button"><i data-lucide="landmark" aria-hidden="true"></i><span>Mutasi bank AI<small>PDF, gambar atau spreadsheet</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+        <input id="bankStatementInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.xls" hidden />
+        <button class="menu-button" id="backupUploadButton" type="button"><i data-lucide="upload" aria-hidden="true"></i><span>Pulihkan backup<small>CSV atau Excel</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+        <input id="importExcelInput" type="file" accept=".xlsx,.xls,.csv" hidden />
+        <p class="menu-label">Export seluruh history</p>
+        <button class="menu-button" id="exportCsvButton" type="button"><i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Download CSV<small>Kompatibel dengan Google Sheets</small></span><i data-lucide="download" aria-hidden="true"></i></button>
+        <button class="menu-button" id="exportExcelButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i><span>Download Excel<small>Termasuk referensi transaksi bank</small></span><i data-lucide="download" aria-hidden="true"></i></button>
+        <p class="menu-label">Preferensi</p>
+        <button class="menu-button" id="themeToggle" type="button">Ganti tema</button>
+        <button class="menu-button danger" id="clearButton" type="button"><i data-lucide="trash-2" aria-hidden="true"></i><span>Hapus semua transaksi</span></button>
+      </div>
+    </div>
+  </dialog>
 
-      <section class="panel table-section" id="transactionsSection">
-        <div class="panel-heading table-heading">
-          <div>
-            <p class="eyebrow">Detail</p>
-            <h2>Transaksi</h2>
-          </div>
-          <div class="filters" aria-label="Filter transaksi">
-            <label class="compact-filter">
-              Tanggal
-              <input id="filterDate" type="date" />
-            </label>
-            <button class="button secondary" id="clearDateFilterButton" type="button">Semua Tanggal Bulan Ini</button>
-            <button class="icon-button detail-close-button" id="closeDetailButton" type="button" aria-label="Tutup detail transaksi">X</button>
-          </div>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tanggal</th>
-                <th>Jenis</th>
-                <th>Kategori</th>
-                <th>Deskripsi</th>
-                <th class="numeric">Nominal</th>
-                <th class="actions-column">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="transactionRows"></tbody>
-          </table>
-        </div>
-        <p class="empty-state hidden" id="emptyState">Belum ada transaksi yang cocok dengan filter.</p>
+  <dialog class="drawer entry-dialog" id="quickEntryModal" aria-labelledby="quickEntryTitle">
+    <div class="quick-entry-modal" id="entryContent">
+      <div class="modal-heading"><div><p class="eyebrow">Catat keuangan</p><h2 id="quickEntryTitle">Tambah transaksi</h2></div><button class="icon-button" id="closeQuickEntryButton" type="button" aria-label="Tutup catat cepat"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="entry-tabs" role="tablist" aria-label="Metode pencatatan"><button id="entryChatTab" role="tab" aria-selected="true" aria-controls="entryChatView" type="button"><i data-lucide="message-square" aria-hidden="true"></i>Chat &amp; voice</button><button id="entryManualTab" role="tab" aria-selected="false" aria-controls="entryManualView" tabindex="-1" type="button"><i data-lucide="square-pen" aria-hidden="true"></i>Input manual</button></div>
+      <div id="entryChatView" role="tabpanel" aria-labelledby="entryChatTab">
+        <form class="chat-form" id="chatForm"><label>Tulis atau ucapkan transaksi<textarea id="chatInput" rows="4" placeholder="Contoh: makan siang 45.000 kemarin" required></textarea></label><div class="chat-actions"><button class="button primary" id="chatSubmitButton" type="submit"><i data-lucide="sparkles" aria-hidden="true"></i>Buat draft</button><button class="button secondary" id="voiceButton" type="button"><i data-lucide="mic" aria-hidden="true"></i>Voice</button></div></form>
+        <p class="status-text" id="chatStatus" role="status">Periksa draft sebelum menyimpan.</p>
+        <form class="draft-card hidden" id="draftCard"><div class="draft-heading"><i data-lucide="file-check" aria-hidden="true"></i><h3>Tinjau draft</h3></div><div class="draft-grid">
+          <label>Tanggal<input id="draftDateInput" type="date" required /></label><label>Jenis<select id="draftTypeInput" required><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></label><label>Kategori<input id="draftCategoryInput" list="categoryList" required /></label><label>Nominal (Rp)<input id="draftAmountInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required /></label><label class="full-width">Keterangan<input id="draftDescriptionInput" type="text" required /></label>
+        </div><div class="draft-actions"><button class="button primary" id="confirmDraftButton" type="button">Simpan draft</button><button class="button secondary" id="editDraftButton" type="button">Ubah manual</button><button class="button ghost" id="cancelDraftButton" type="button">Batal</button></div></form>
+      </div>
+      <section id="entryManualView" role="tabpanel" aria-labelledby="entryManualTab" hidden>
+        <h3 id="formTitle">Tambah manual</h3>
+        <form class="transaction-form" id="transactionForm"><input type="hidden" id="transactionId" /><div class="manual-grid">
+          <label>Tanggal<input id="dateInput" name="date" type="date" required /></label><label>Jenis<select id="typeInput" name="type" required><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select></label><label>Kategori<input id="categoryInput" name="category" list="categoryList" placeholder="Pilih atau tulis kategori" required /><datalist id="categoryList"></datalist></label><label>Nominal (Rp)<input id="amountInput" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required /></label><label class="full-width">Deskripsi<input id="descriptionInput" name="description" type="text" placeholder="Keterangan transaksi" required /></label>
+        </div><div class="manual-actions"><button class="button primary" id="saveButton" type="submit">Simpan transaksi</button><button class="button ghost hidden" id="cancelEditButton" type="button">Batal edit</button></div></form>
       </section>
+    </div>
+  </dialog>
 
-      <footer class="app-footer">powered by - pangestufm</footer>
-    </main>
-
-    <button class="quick-entry-button hidden" id="quickEntryButton" type="button" aria-label="Tambah transaksi" title="Tambah transaksi">
-      <svg class="quick-entry-icon" aria-hidden="true" viewBox="0 0 24 24">
-        <path d="M12 5v14" />
-        <path d="M5 12h14" />
-      </svg>
-      Tambah Transaksi
-    </button>
-
-    <button class="detail-toggle-button hidden" id="detailToggleButton" type="button" aria-label="Buka detail transaksi" title="Buka detail transaksi">
-      Detail Transaksi
-    </button>
-
-    <script src="vendor/xlsx.full.min.js"></script>
-    <script src="bank-reconciliation.js?v=20260916-reconcile"></script>
-    <script src="bank-document.js?v=20260917-nexos"></script>
-    <script src="currency-input.js?v=20261003-rupiah"></script>
-    <script src="app.js?v=20261003-rupiah"></script>
-  </body>
+  <dialog class="bank-import-dialog" id="bankImportModal" aria-labelledby="bankImportTitle">
+    <div class="bank-import-modal"><div class="modal-heading"><div><p class="eyebrow">Impor mutasi bank</p><h2 id="bankImportTitle">Tinjau hasil agent</h2><p class="bank-import-file" id="bankImportFileName">Dokumen belum dipilih</p></div><button class="icon-button" id="closeBankImportButton" type="button" aria-label="Tutup impor mutasi bank"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <p class="status-text bank-import-status" id="bankImportStatus" role="status">Periksa hasilnya sebelum menyimpan.</p>
+      <div class="bank-import-summary" aria-label="Ringkasan dokumen"><div><span>Dipilih</span><strong id="bankImportSelectedCount">0</strong></div><div class="income"><span>Pemasukan</span><strong id="bankImportIncomeTotal">Rp0</strong></div><div class="expense"><span>Pengeluaran</span><strong id="bankImportExpenseTotal">Rp0</strong></div></div>
+      <div class="bank-import-table-wrap"><table class="bank-import-table"><thead><tr><th><span class="sr-only">Pilih</span></th><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Keterangan</th><th class="numeric">Nominal</th><th>Status</th><th>Keyakinan</th></tr></thead><tbody id="bankImportRows"></tbody></table></div>
+      <div class="bank-import-footer"><label class="bank-select-all"><input id="bankImportSelectAll" type="checkbox" checked />Pilih semua</label><div class="bank-import-actions"><button class="button secondary" id="cancelBankImportButton" type="button">Batal</button><button class="button primary" id="saveBankImportButton" type="button">Simpan transaksi terpilih</button></div><p class="bank-import-privacy">Dokumen diproses oleh provider AI di Netlify.</p></div>
+    </div>
+  </dialog>
+  <dialog class="detail-dialog" id="detailDialog" aria-labelledby="transactionsTitle"></dialog>
+  <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage"><form method="dialog"><div class="modal-heading"><h2 id="confirmTitle">Konfirmasi</h2><button class="icon-button" value="cancel" aria-label="Tutup konfirmasi"><i data-lucide="x" aria-hidden="true"></i></button></div><p id="confirmMessage"></p><div class="confirmation-actions"><button class="button secondary" value="cancel" autofocus>Batal</button><button class="button primary" id="confirmAccept" value="accept">Lanjutkan</button></div></form></dialog>
+  <div class="toast hidden" id="toast" role="status"></div>
+  <button class="floating-button hidden" id="quickEntryButton" type="button" aria-label="Tambah transaksi" title="Tambah transaksi"><i data-lucide="message-square-plus" aria-hidden="true"></i></button>
+  <button class="floating-button hidden" id="detailToggleButton" type="button" aria-label="Buka detail transaksi" title="Detail transaksi"><i data-lucide="list" aria-hidden="true"></i></button>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/lucide.min.js"></script>
+  <script src="bank-reconciliation.js?v=20260916-reconcile"></script>
+  <script src="bank-document.js?v=20260917-nexos"></script>
+  <script src="currency-input.js?v=20261003-rupiah"></script>
+  <script src="dashboard-ui.js?v=20261004-motion"></script>
+  <script src="app.js?v=20261004-motion"></script>
+</body>
 </html>

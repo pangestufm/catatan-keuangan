@@ -1,3 +1,4 @@
 api/data/
 .netlify/
 node_modules/
+dist/
