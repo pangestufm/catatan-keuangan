@@ -33,18 +33,13 @@ Pilihan upload manual:
 
 ```text
 APP_ACCESS_TOKEN=buat_token_rahasia_sendiri
-AI_PROVIDER=gemini
-GEMINI_API_KEY=isi_dengan_api_key_gemini
-GEMINI_MODEL=gemini-2.5-flash
-OPENAI_API_KEY=isi_dengan_api_key_openai
-OPENAI_MODEL=gpt-4o-mini
 NEXOS_API_KEY=isi_dengan_api_key_nexos
 NEXOS_MODEL=DeepSeek V4.1 Flash
 ```
 
 5. Deploy ulang site di Netlify.
 
-`AI_PROVIDER` menentukan agent AI untuk fitur catat cepat. Isi `gemini` untuk Gemini atau `openai` untuk OpenAI. Jika memakai Gemini, isi `GEMINI_API_KEY`; `GEMINI_MODEL` opsional dan default-nya `gemini-2.5-flash`. Jika memakai OpenAI, isi `OPENAI_API_KEY`; `OPENAI_MODEL` opsional dan default-nya `gpt-4o-mini`. Fitur impor mutasi bank memakai Nexos; `NEXOS_MODEL` opsional dan default-nya `DeepSeek V4.1 Flash`.
+Chat, voice, dan impor mutasi bank memakai Nexos. `NEXOS_API_KEY` wajib untuk seluruh fitur agent AI; `NEXOS_MODEL` opsional dan default-nya `DeepSeek V4.1 Flash`.
 
 ### 2. Environment variables
 
@@ -52,16 +47,11 @@ Di Netlify, buka `Site configuration` > `Environment variables`, lalu tambahkan:
 
 ```text
 APP_ACCESS_TOKEN=buat_token_rahasia_sendiri
-AI_PROVIDER=gemini
-GEMINI_API_KEY=isi_dengan_api_key_gemini
-GEMINI_MODEL=gemini-2.5-flash
-OPENAI_API_KEY=isi_dengan_api_key_openai
-OPENAI_MODEL=gpt-4o-mini
 NEXOS_API_KEY=isi_dengan_api_key_nexos
 NEXOS_MODEL=DeepSeek V4.1 Flash
 ```
 
-`APP_ACCESS_TOKEN` wajib untuk mode online. Variabel Gemini/OpenAI diperlukan jika ingin fitur agent chat/voice. `NEXOS_API_KEY` diperlukan untuk fitur impor mutasi bank.
+`APP_ACCESS_TOKEN` wajib untuk mode online. `NEXOS_API_KEY` diperlukan untuk chat, voice, dan impor mutasi bank. Hasil chat/voice tetap ditampilkan sebagai draft agar dapat diperiksa sebelum disimpan.
 
 ### 3. Buat Netlify Database
 
@@ -119,12 +109,12 @@ Jika masih `Mode Lokal`, cek:
 - Import `.xlsx` / `.xls` dari format Excel lama:
   - Pemasukan: kolom A uraian, kolom B tanggal, kolom C nominal.
   - Pengeluaran: kolom E uraian, kolom F tanggal, kolom G kategori, kolom H nominal.
-- Import mutasi bank dengan agent Nexos `DeepSeek V4.1 Flash` dari PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX (maksimal 3,5 MB; PDF maksimal 6 halaman per unggahan).
+- Import mutasi bank dengan agent Nexos `DeepSeek V4.1 Flash` dari PDF, PNG, JPG, WEBP, CSV, XLS, atau XLSX (maksimal 3,5 MB). PDF teks diproses utuh hingga 100 halaman dalam satu unggahan.
 - Review batch sebelum impor: tanggal, jenis, kategori, keterangan, dan nominal dapat diedit; transaksi dapat dipilih atau dibatalkan satu per satu.
 - Rekonsiliasi unggahan mutasi yang periodenya tumpang tindih: semua baris tetap diperiksa dan diberi status `Baru`, `Sudah ada`, atau `Berubah` sebelum database diperbarui.
 - Transaksi lama tidak diinput ulang. Perubahan pada transaksi lama hanya diterapkan setelah barisnya dipilih secara manual di layar review.
 - Catat cepat dari chat, contoh: `belanja pizza tanggal 4 200000`.
-- Agent AI Gemini/OpenAI untuk membaca konteks chat/voice dengan Structured Outputs. Jika provider AI gagal, aplikasi otomatis fallback ke parser lokal.
+- Agent AI Nexos `DeepSeek V4.1 Flash` untuk membaca konteks chat/voice dan otomatis menentukan jenis, tanggal, kategori, deskripsi, serta nominal. Jika Nexos gagal, aplikasi otomatis fallback ke parser lokal.
 - Voice input untuk catat cepat di browser yang mendukung Speech Recognition.
 - Draft konfirmasi sebelum transaksi dari chat/voice disimpan.
 - Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.

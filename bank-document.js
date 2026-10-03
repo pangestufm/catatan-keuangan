@@ -3,7 +3,8 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.BankDocument = api;
 }(typeof globalThis !== "undefined" ? globalThis : this, () => {
-  const MAX_PDF_PAGES = 6;
+  const MAX_TEXT_PDF_PAGES = 100;
+  const MAX_SCAN_PDF_PAGES = 12;
   const MAX_TOTAL_BASE64_LENGTH = 6 * 1024 * 1024;
   const TARGET_PAGE_WIDTH = 1200;
   const JPEG_QUALITY = 0.76;
@@ -17,7 +18,7 @@
     const pdf = await loadingTask.promise;
 
     try {
-      assertPageLimit(pdf.numPages);
+      assertPageLimit(pdf.numPages, MAX_TEXT_PDF_PAGES);
       const pages = [];
 
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -45,7 +46,7 @@
     const pdf = await loadingTask.promise;
 
     try {
-      assertPageLimit(pdf.numPages);
+      assertPageLimit(pdf.numPages, MAX_SCAN_PDF_PAGES);
 
       const images = [];
       let totalBase64Length = 0;
@@ -87,9 +88,9 @@
     }
   }
 
-  function assertPageLimit(pageCount) {
-    if (pageCount > MAX_PDF_PAGES) {
-      throw new Error(`PDF maksimal ${MAX_PDF_PAGES} halaman per unggahan. Bagi dokumen menjadi beberapa bagian agar tidak ada transaksi terlewat.`);
+  function assertPageLimit(pageCount, limit) {
+    if (pageCount > limit) {
+      throw new Error(`PDF maksimal ${limit} halaman per unggahan untuk jenis dokumen ini. Bagi dokumen menjadi beberapa bagian agar tidak ada transaksi terlewat.`);
     }
   }
 
@@ -116,7 +117,8 @@
   }
 
   return {
-    MAX_PDF_PAGES,
+    MAX_SCAN_PDF_PAGES,
+    MAX_TEXT_PDF_PAGES,
     extractPdfText,
     renderPdfToImages,
   };

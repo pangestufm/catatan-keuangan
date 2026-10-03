@@ -5,8 +5,8 @@ const corsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const NEXOS_API_URL = "https://api.nexos.ai/v1/chat/completions";
+const DEFAULT_NEXOS_MODEL = "DeepSeek V4.1 Flash";
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -26,6 +26,10 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (!process.env.NEXOS_API_KEY) {
+      return respond(503, { error: "NEXOS_API_KEY belum diisi di Netlify environment variables." });
+    }
+
     const payload = JSON.parse(event.body || "{}");
     const text = cleanString(payload.text);
     if (!text) {
@@ -41,175 +45,59 @@ exports.handler = async (event) => {
       recentTransactions: sanitizeRecentTransactions(payload.recentTransactions).slice(0, 35),
     };
 
-    const provider = getProvider();
-    const result = provider === "gemini"
-      ? await callGemini(context)
-      : await callOpenAI(context);
+    const { result, model } = await callNexos(context);
 
-    return respond(200, { provider, transaction: sanitizeParsedTransaction(result) });
+    return respond(200, {
+      provider: "nexos",
+      model,
+      transaction: sanitizeParsedTransaction(result),
+    });
   } catch (error) {
     return respond(500, { error: "Parser agent gagal.", message: error.message });
   }
 };
 
-function getProvider() {
-  const configuredProvider = cleanString(process.env.AI_PROVIDER).toLowerCase();
-  if (configuredProvider === "gemini" || configuredProvider === "openai") return configuredProvider;
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  return "openai";
-}
-
-async function callOpenAI(context) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY belum diisi di Netlify environment variables.");
-  }
-
-  const response = await fetch("https://api.openai.com/v1/responses", {
+async function callNexos(context) {
+  const model = cleanString(process.env.NEXOS_MODEL) || DEFAULT_NEXOS_MODEL;
+  const response = await fetch(NEXOS_API_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.NEXOS_API_KEY}`,
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL,
-      store: false,
-      instructions: buildInstructions(context),
-      input: JSON.stringify({
-        text: context.text,
-        today: context.today,
-        timezone: context.timezone,
-        available_categories: context.categories,
-        learned_category_memory: context.categoryMemory,
-        recent_transactions: context.recentTransactions,
-      }),
-      text: {
-        format: {
-          type: "json_schema",
-          name: "transaction_parser_result",
-          strict: true,
-          schema: getTransactionSchema(true),
-        },
-      },
+      model,
+      messages: [
+        { role: "system", content: buildInstructions(context) },
+        { role: "user", content: JSON.stringify(buildAgentInput(context)) },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 1200,
     }),
   });
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body?.error?.message || `OpenAI API error ${response.status}`);
+    throw new Error(body?.error?.message || `Nexos API gagal (status ${response.status}).`);
   }
 
-  const outputText = extractOutputText(body);
+  const outputText = extractNexosText(body);
   if (!outputText) {
-    throw new Error("Respons OpenAI tidak berisi output_text.");
+    throw new Error("Respons Nexos tidak berisi hasil transaksi.");
   }
 
-  return JSON.parse(outputText);
+  return { model, result: parseJsonOutput(outputText) };
 }
 
-async function callGemini(context) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY belum diisi di Netlify environment variables.");
-  }
-
-  const model = normalizeGeminiModelName(process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
-  const body = buildGeminiRequestBody(context, false);
-  let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": process.env.GEMINI_API_KEY,
-    },
-    body: JSON.stringify(body),
-  });
-
-  let responseBody = await response.json().catch(() => ({}));
-
-  if (!response.ok && response.status === 400) {
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify(buildGeminiRequestBody(context, true)),
-    });
-    responseBody = await response.json().catch(() => ({}));
-  }
-
-  if (!response.ok) {
-    throw new Error(responseBody?.error?.message || `Gemini API error ${response.status}`);
-  }
-
-  const outputText = extractGeminiText(responseBody);
-  if (!outputText) {
-    throw new Error("Respons Gemini tidak berisi teks JSON.");
-  }
-
-  return JSON.parse(outputText);
-}
-
-function normalizeGeminiModelName(value) {
-  const model = cleanString(value) || DEFAULT_GEMINI_MODEL;
-  return model.startsWith("models/") ? model : `models/${model}`;
-}
-
-function buildGeminiRequestBody(context, legacySchema) {
-  const schema = getTransactionSchema(false);
-  const prompt = [
-    buildInstructions(context),
-    "",
-    "Input JSON:",
-    JSON.stringify({
-      text: context.text,
-      today: context.today,
-      timezone: context.timezone,
-      available_categories: context.categories,
-      learned_category_memory: context.categoryMemory,
-      recent_transactions: context.recentTransactions,
-    }),
-  ].join("\n");
-
-  const generationConfig = legacySchema
-    ? {
-      responseMimeType: "application/json",
-      responseSchema: schema,
-      temperature: 0.1,
-    }
-    : {
-      responseFormat: {
-        text: {
-          mimeType: "application/json",
-          schema,
-        },
-      },
-      temperature: 0.1,
-    };
-
+function buildAgentInput(context) {
   return {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig,
-  };
-}
-
-function getTransactionSchema(openAiStrict) {
-  return {
-    type: "object",
-    ...(openAiStrict ? { additionalProperties: false } : {}),
-    required: ["type", "date", "category", "description", "amount", "confidence", "reason"],
-    properties: {
-      type: { type: "string", enum: ["income", "expense"] },
-      date: { type: "string", description: "Tanggal format YYYY-MM-DD." },
-      category: { type: "string" },
-      description: { type: "string" },
-      amount: { type: "number" },
-      confidence: { type: "number" },
-      reason: { type: "string" },
-    },
+    text: context.text,
+    today: context.today,
+    timezone: context.timezone,
+    available_categories: context.categories,
+    learned_category_memory: context.categoryMemory,
+    recent_transactions: context.recentTransactions,
   };
 }
 
@@ -229,30 +117,22 @@ function buildInstructions(context) {
     "- Description harus singkat dan bersih: hapus kata catat, aku, saya, belanja, beli, bayar, tanggal, kategori, nominal, dan filler lain. Sisakan objek transaksi seperti Pizza, Gaji, Bensin.",
     "- Pakai learned_category_memory dan recent_transactions untuk mengikuti kebiasaan kategori user.",
     "- confidence 0 sampai 1. reason singkat dalam bahasa Indonesia.",
-    "Balas hanya JSON sesuai schema.",
+    "Balas hanya JSON object dengan field type, date, category, description, amount, confidence, dan reason.",
   ].join("\n");
 }
 
-function extractOutputText(body) {
-  if (typeof body.output_text === "string") return body.output_text;
-
-  const parts = [];
-  (body.output || []).forEach((item) => {
-    (item.content || []).forEach((content) => {
-      if (typeof content.text === "string") parts.push(content.text);
-    });
-  });
-  return parts.join("\n").trim();
+function extractNexosText(body) {
+  const content = body?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => cleanString(part?.text)).filter(Boolean).join("\n");
 }
 
-function extractGeminiText(body) {
-  const parts = [];
-  (body.candidates || []).forEach((candidate) => {
-    (candidate.content?.parts || []).forEach((part) => {
-      if (typeof part.text === "string") parts.push(part.text);
-    });
-  });
-  return parts.join("\n").trim();
+function parseJsonOutput(value) {
+  const normalized = cleanString(value)
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  return JSON.parse(normalized);
 }
 
 function sanitizeParsedTransaction(value) {

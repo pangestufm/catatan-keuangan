@@ -151,3 +151,81 @@ test("menyembunyikan HTML upstream pada error Nexos", async (t) => {
   assert.equal(body.error, "Nexos terlalu lama memproses dokumen. Coba kurangi jumlah halaman lalu ulangi.");
   assert.doesNotMatch(response.body, /<HTML>/i);
 });
+
+test("membagi PDF teks panjang menjadi beberapa request lalu menggabungkan hasilnya", async (t) => {
+  useNexosEnvironment(t);
+  const originalFetch = global.fetch;
+  let requestCount = 0;
+
+  global.fetch = async (_url, options) => {
+    requestCount += 1;
+    const request = JSON.parse(options.body);
+    assert.match(request.messages[0].content[0].text, /Bagian \d+ dari \d+/);
+
+    const response = createSuccessResponse();
+    const body = await response.json();
+    const parsed = JSON.parse(body.choices[0].message.content);
+    parsed.transactions[0].reference = `CHUNK-${requestCount}`;
+    parsed.transactions[0].description = `Transaksi bagian ${requestCount}`;
+    body.choices[0].message.content = JSON.stringify(parsed);
+    return { ...response, json: async () => body };
+  };
+
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  const documentText = Array.from({ length: 10 }, (_, index) => (
+    `=== Halaman ${index + 1} ===\n${`Baris transaksi ${index + 1} `.repeat(100)}`
+  )).join("\n\n");
+
+  const response = await handler({
+    httpMethod: "POST",
+    headers: {},
+    body: JSON.stringify({
+      fileName: "mutasi-10-halaman.pdf",
+      documentText,
+      today: "2026-09-17",
+    }),
+  });
+  const body = JSON.parse(response.body);
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(requestCount > 1);
+  assert.equal(body.transactions.length, requestCount);
+});
+
+test("memberi Nexos waktu proses hingga mendekati batas function Netlify", async (t) => {
+  useNexosEnvironment(t);
+  const originalFetch = global.fetch;
+  const originalSetTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  let timeoutDelay = 0;
+
+  global.setTimeout = (_callback, delay) => {
+    timeoutDelay = delay;
+    return 1;
+  };
+  global.clearTimeout = () => {};
+  global.fetch = async () => createSuccessResponse();
+
+  t.after(() => {
+    global.fetch = originalFetch;
+    global.setTimeout = originalSetTimeout;
+    global.clearTimeout = originalClearTimeout;
+  });
+
+  const response = await handler({
+    httpMethod: "POST",
+    headers: {},
+    body: JSON.stringify({
+      fileName: "mutasi.csv",
+      documentText: "Tanggal,Keterangan,Debit\n2026-09-17,Taksi,85000",
+      today: "2026-09-17",
+    }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.ok(timeoutDelay >= 50000, `timeout masih terlalu pendek: ${timeoutDelay}ms`);
+  assert.ok(timeoutDelay < 60000, `timeout harus di bawah batas Netlify: ${timeoutDelay}ms`);
+});

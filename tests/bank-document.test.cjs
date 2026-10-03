@@ -44,15 +44,33 @@ test("merender setiap halaman PDF menjadi JPEG yang dikirim ke agent", async () 
   ]);
 });
 
-test("menolak PDF lebih dari enam halaman agar transaksi tidak terpotong diam-diam", async () => {
-  await assert.rejects(
-    renderPdfToImages(
-      { arrayBuffer: async () => new ArrayBuffer(8) },
-      createPdfJs(7),
-      { canvasFactory: () => ({}) },
-    ),
-    /maksimal 6 halaman/i,
+test("mengekstrak seluruh PDF teks sepuluh halaman dalam satu unggahan", async () => {
+  const pdfjs = {
+    getDocument: () => ({
+      promise: Promise.resolve({
+        numPages: 10,
+        getPage: async (pageNumber) => ({
+          getTextContent: async () => ({
+            items: [{
+              str: `Transaksi halaman ${pageNumber}`,
+              transform: [1, 0, 0, 1, 10, 700],
+            }],
+          }),
+          cleanup: () => {},
+        }),
+        cleanup: () => {},
+        destroy: () => Promise.resolve(),
+      }),
+    }),
+  };
+
+  const text = await extractPdfText(
+    { arrayBuffer: async () => new ArrayBuffer(8) },
+    pdfjs,
   );
+
+  assert.match(text, /=== Halaman 10 ===/);
+  assert.match(text, /Transaksi halaman 10/);
 });
 
 test("mengekstrak baris PDF teks sebelum memakai jalur gambar", async () => {

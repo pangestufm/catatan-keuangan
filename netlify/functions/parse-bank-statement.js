@@ -7,10 +7,12 @@ const corsHeaders = {
 
 const NEXOS_API_URL = "https://api.nexos.ai/v1/chat/completions";
 const DEFAULT_NEXOS_MODEL = "DeepSeek V4.1 Flash";
-const MAX_IMAGE_COUNT = 6;
+const MAX_IMAGE_COUNT = 12;
 const MAX_TOTAL_BASE64_LENGTH = 6 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 250000;
-const NEXOS_TIMEOUT_MS = 25000;
+const NEXOS_TIMEOUT_MS = 55000;
+const MAX_TEXT_CHUNK_LENGTH = 5000;
+const IMAGES_PER_CHUNK = 2;
 
 class AgentError extends Error {
   constructor(statusCode, message) {
@@ -100,14 +102,37 @@ function sanitizeDocumentImages(value) {
 
 async function callNexos(context) {
   const model = cleanString(process.env.NEXOS_MODEL) || DEFAULT_NEXOS_MODEL;
-  const content = [{ type: "text", text: buildPromptWithDocument(context) }];
+  const chunks = createDocumentChunks(context);
+  const chunkResults = await Promise.all(chunks.map((chunk, index) => (
+    callNexosChunk(context, chunk, index, chunks.length, model)
+  )));
+  const statementResult = chunkResults.find((result) => (
+    cleanString(result?.statement?.institution)
+    || cleanString(result?.statement?.accountName)
+    || cleanString(result?.statement?.period)
+  ));
 
-  context.documentImages.forEach((image) => {
+  return {
+    model,
+    result: {
+      statement: statementResult?.statement || {},
+      transactions: chunkResults.flatMap((result) => (
+        Array.isArray(result?.transactions) ? result.transactions : []
+      )),
+    },
+  };
+}
+
+async function callNexosChunk(context, chunk, chunkIndex, totalChunks, model) {
+  const content = [{
+    type: "text",
+    text: buildPromptWithDocument(context, chunk, chunkIndex, totalChunks),
+  }];
+
+  chunk.images.forEach((image) => {
     content.push({
       type: "image_url",
-      image_url: {
-        url: `data:${image.mimeType};base64,${image.data}`,
-      },
+      image_url: { url: `data:${image.mimeType};base64,${image.data}` },
     });
   });
 
@@ -146,7 +171,7 @@ async function callNexos(context) {
     const outputText = extractNexosText(body);
     if (!outputText) throw new AgentError(502, "Respons Nexos tidak berisi hasil transaksi.");
 
-    return { result: parseJsonOutput(outputText), model };
+    return parseJsonOutput(outputText);
   } catch (error) {
     if (error instanceof AgentError) throw error;
     if (error?.name === "AbortError") {
@@ -158,19 +183,71 @@ async function callNexos(context) {
   }
 }
 
-function buildPromptWithDocument(context) {
-  const prompt = buildPrompt(context);
-  if (!context.documentText) return prompt;
-  return `${prompt}\n\nIsi dokumen dalam format teks/CSV:\n${context.documentText}`;
+function createDocumentChunks(context) {
+  if (context.documentText) {
+    return splitDocumentText(context.documentText).map((text) => ({ text, images: [] }));
+  }
+
+  const chunks = [];
+  for (let index = 0; index < context.documentImages.length; index += IMAGES_PER_CHUNK) {
+    chunks.push({
+      text: "",
+      images: context.documentImages.slice(index, index + IMAGES_PER_CHUNK),
+    });
+  }
+  return chunks;
 }
 
-function buildPrompt(context) {
+function splitDocumentText(value) {
+  const text = cleanString(value);
+  const markerMatches = [...text.matchAll(/^=== Halaman \d+ ===/gm)];
+  const sections = markerMatches.length > 1
+    ? markerMatches.map((match, index) => text.slice(
+      match.index,
+      markerMatches[index + 1]?.index ?? text.length,
+    ).trim())
+    : splitLongSection(text);
+
+  const chunks = [];
+  sections.forEach((section) => {
+    splitLongSection(section).forEach((part) => {
+      const current = chunks[chunks.length - 1] || "";
+      const combined = current ? `${current}\n\n${part}` : part;
+      if (current && combined.length > MAX_TEXT_CHUNK_LENGTH) chunks.push(part);
+      else if (current) chunks[chunks.length - 1] = combined;
+      else chunks.push(part);
+    });
+  });
+  return chunks.filter(Boolean);
+}
+
+function splitLongSection(value) {
+  const parts = [];
+  let remaining = cleanString(value);
+  while (remaining.length > MAX_TEXT_CHUNK_LENGTH) {
+    let splitAt = remaining.lastIndexOf("\n", MAX_TEXT_CHUNK_LENGTH);
+    if (splitAt < Math.floor(MAX_TEXT_CHUNK_LENGTH * 0.6)) splitAt = MAX_TEXT_CHUNK_LENGTH;
+    parts.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
+}
+
+function buildPromptWithDocument(context, chunk, chunkIndex, totalChunks) {
+  const prompt = buildPrompt(context, chunkIndex, totalChunks);
+  if (!chunk.text) return prompt;
+  return `${prompt}\n\nIsi bagian dokumen dalam format teks/CSV:\n${chunk.text}`;
+}
+
+function buildPrompt(context, chunkIndex, totalChunks) {
   const categories = context.categories.length ? context.categories.join(", ") : "Lainnya";
   return [
     "Kamu adalah agent rekonsiliasi mutasi rekening bank berbahasa Indonesia.",
     `Baca dokumen ${context.fileName || "mutasi bank"} dan ekstrak setiap transaksi menjadi JSON.`,
     `Hari ini ${context.today}, timezone ${context.timezone}.`,
     `Kategori aplikasi yang tersedia: ${categories}.`,
+    `Bagian ${chunkIndex + 1} dari ${totalChunks}. Ekstrak hanya transaksi yang terlihat pada bagian ini.`,
     "",
     "Aturan klasifikasi:",
     "- Tentukan jenis dari sudut pandang pemilik rekening: dana masuk/kredit/CR adalah income; dana keluar/debit/DB adalah expense.",

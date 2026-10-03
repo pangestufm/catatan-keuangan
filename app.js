@@ -827,7 +827,7 @@ async function buildBankStatementDocumentPayload(file) {
     if (!window.BankDocument?.renderPdfToImages) {
       throw new Error("Modul pengolah PDF belum termuat. Muat ulang halaman lalu coba lagi.");
     }
-    showBankImportStatus(`Menyiapkan maksimal ${window.BankDocument.MAX_PDF_PAGES} halaman PDF untuk agent...`, "info");
+    showBankImportStatus("Mengekstrak seluruh halaman PDF untuk agent...", "info");
     const pdfjs = await loadPdfJs();
     const documentText = await window.BankDocument.extractPdfText(file, pdfjs);
     if (documentText.replace(/=== Halaman \d+ ===/g, "").trim().length >= 40) {
@@ -1396,7 +1396,7 @@ async function requestAgentTransaction(text) {
 
   for (const apiUrl of PARSE_API_URLS) {
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 8500);
+    const timeoutId = window.setTimeout(() => controller.abort(), 30000);
 
     try {
       const response = await fetch(apiUrl, {
@@ -1409,7 +1409,7 @@ async function requestAgentTransaction(text) {
       if (!response.ok) continue;
 
       const data = await response.json();
-      const draft = normalizeAgentDraft(data?.transaction, text, data?.provider);
+      const draft = normalizeAgentDraft(data?.transaction, text);
       if (draft) return draft;
     } catch {
       // Parser lokal tetap dipakai saat function belum tersedia atau request agent gagal.
@@ -1421,7 +1421,7 @@ async function requestAgentTransaction(text) {
   return null;
 }
 
-function normalizeAgentDraft(draft, fallbackText, provider = "") {
+function normalizeAgentDraft(draft, fallbackText) {
   if (!draft || typeof draft !== "object") return null;
 
   const amount = parseAmount(draft.amount);
@@ -1441,13 +1441,12 @@ function normalizeAgentDraft(draft, fallbackText, provider = "") {
     category: findClosestCategory(category),
     description: toTitleCase(description),
     amount,
-    source: provider === "gemini" ? "Gemini Agent" : "ChatGPT Agent",
+    source: "Nexos Agent",
   };
 }
 
 function getDraftSourceLabel(source) {
-  if (source === "Gemini Agent") return "agent Gemini";
-  if (source === "ChatGPT Agent") return "agent ChatGPT";
+  if (source === "Nexos Agent") return "agent Nexos";
   return "parser lokal";
 }
 
