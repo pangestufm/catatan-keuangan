@@ -256,7 +256,7 @@
               </label>
               <label>
                 Nominal
-                <input id="draftAmountInput" type="number" min="0" step="100" required />
+                <input id="draftAmountInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required />
               </label>
               <label class="draft-description">
                 Keterangan
@@ -301,7 +301,7 @@
 
                 <label>
                   Nominal
-                  <input id="amountInput" name="amount" type="number" min="0" step="100" placeholder="0" required />
+                  <input id="amountInput" name="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required />
                 </label>
 
                 <label class="manual-description">
@@ -546,6 +546,7 @@
     <script src="vendor/xlsx.full.min.js"></script>
     <script src="bank-reconciliation.js?v=20260916-reconcile"></script>
     <script src="bank-document.js?v=20260917-nexos"></script>
-    <script src="app.js?v=20260917-nexos"></script>
+    <script src="currency-input.js?v=20261003-rupiah"></script>
+    <script src="app.js?v=20261003-rupiah"></script>
   </body>
 </html>

@@ -204,6 +204,8 @@ function initialize() {
 
 function bindEvents() {
   elements.form.addEventListener("submit", handleSubmit);
+  elements.amountInput.addEventListener("input", formatCurrencyInput);
+  elements.draftAmountInput.addEventListener("input", formatCurrencyInput);
   elements.cancelEditButton.addEventListener("click", resetForm);
   elements.monthFilterInput.addEventListener("change", handleMonthFilterChange);
   elements.globalSearchInput.addEventListener("input", handleGlobalSearchChange);
@@ -252,6 +254,10 @@ function bindEvents() {
   elements.localModeButton.addEventListener("click", enterLocalMode);
   elements.logoutButton.addEventListener("click", logout);
   elements.transactionRows.addEventListener("click", handleTableAction);
+}
+
+function formatCurrencyInput(event) {
+  window.CurrencyInput.formatElement(event.target);
 }
 
 function initializeSession() {
@@ -621,7 +627,7 @@ function isValidTransaction(transaction) {
 function handleSubmit(event) {
   event.preventDefault();
 
-  const amount = Number(elements.amountInput.value);
+  const amount = window.CurrencyInput.parseRupiahInput(elements.amountInput.value);
   const category = elements.categoryInput.value.trim();
   const description = elements.descriptionInput.value.trim();
 
@@ -964,7 +970,7 @@ function renderBankImportDrafts() {
         </td>
         <td data-label="Kategori"><input type="text" data-field="category" value="${escapeHtml(draft.category)}" list="categoryList" aria-label="Kategori transaksi ${index + 1}" /></td>
         <td data-label="Keterangan"><input class="bank-description-input" type="text" data-field="description" value="${escapeHtml(draft.description)}" aria-label="Keterangan transaksi ${index + 1}" /></td>
-        <td data-label="Nominal"><input class="bank-amount-input" type="number" data-field="amount" value="${Number(draft.amount) || 0}" min="0" step="100" aria-label="Nominal transaksi ${index + 1}" /></td>
+        <td data-label="Nominal"><input class="bank-amount-input" type="text" inputmode="numeric" autocomplete="off" data-field="amount" value="${window.CurrencyInput.formatRupiahInput(draft.amount)}" aria-label="Nominal transaksi ${index + 1}" /></td>
         <td data-label="Status"><span class="reconciliation-badge ${status}" title="${escapeHtml(draft.reconciliationNote || statusLabel)}">${statusLabel}</span></td>
         <td data-label="Keyakinan"><span class="confidence-badge ${confidenceClass}" title="${escapeHtml(draft.reason || "Keyakinan klasifikasi agent")}">${confidenceLabel}</span></td>
       </tr>
@@ -985,7 +991,8 @@ function handleBankImportDraftChange(event) {
   if (field === "selected") {
     draft.selected = event.target.checked;
   } else if (field === "amount") {
-    draft.amount = Math.max(0, Math.round(Number(event.target.value) || 0));
+    window.CurrencyInput.formatElement(event.target);
+    draft.amount = window.CurrencyInput.parseRupiahInput(event.target.value);
   } else {
     draft[field] = cleanText(event.target.value);
   }
@@ -1306,7 +1313,7 @@ function showDraft(parsed) {
   elements.draftDateInput.value = parsed.date;
   elements.draftTypeInput.value = parsed.type;
   elements.draftCategoryInput.value = parsed.category;
-  elements.draftAmountInput.value = parsed.amount;
+  elements.draftAmountInput.value = window.CurrencyInput.formatRupiahInput(parsed.amount);
   elements.draftDescriptionInput.value = parsed.description;
   elements.draftCard.classList.remove("hidden");
 }
@@ -1314,7 +1321,7 @@ function showDraft(parsed) {
 function confirmDraftTransaction() {
   if (!state.pendingDraft) return;
 
-  const amount = Number(elements.draftAmountInput.value);
+  const amount = window.CurrencyInput.parseRupiahInput(elements.draftAmountInput.value);
   const draft = {
     ...state.pendingDraft,
     date: elements.draftDateInput.value,
@@ -1661,7 +1668,7 @@ function fillForm(transaction) {
   elements.typeInput.value = transaction.type;
   elements.categoryInput.value = transaction.category;
   elements.descriptionInput.value = transaction.description;
-  elements.amountInput.value = transaction.amount;
+  elements.amountInput.value = window.CurrencyInput.formatRupiahInput(transaction.amount);
   elements.formTitle.textContent = "Edit Transaksi";
   elements.saveButton.textContent = "Simpan Perubahan";
   elements.cancelEditButton.classList.remove("hidden");
