@@ -8,9 +8,10 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23176448'/%3E%3Cpath d='M7 10h18v13H7zM7 14h18' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='21' cy='18' r='1' fill='white'/%3E%3C/svg%3E" />
   <link rel="preload" href="vendor/fonts/ibm-plex-sans-400.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="stylesheet" href="styles.css?v=20261004-motion" />
+  <link rel="stylesheet" href="financial-books.css?v=20261006-master" />
 </head>
 <body>
-  <a class="skip-link" href="#overview">Lewati navigasi</a>
+  <a class="skip-link" id="skipContentLink" href="#overview">Lewati navigasi</a>
   <section class="login-screen" id="loginScreen">
     <form class="login-card" id="loginForm">
       <i data-lucide="wallet" class="login-mark" aria-hidden="true"></i>
@@ -39,9 +40,11 @@
       <a href="#categoryPanel"><i data-lucide="layers" aria-hidden="true"></i>Kategori</a>
       <a href="#trendSection"><i data-lucide="chart-no-axes-combined" aria-hidden="true"></i>Tren</a>
       <a href="#transactionsSection" id="navTransactionsButton"><i data-lucide="list" aria-hidden="true"></i>Transaksi</a>
+      <a href="#cicilan" class="special-book-link" data-book-route="installments"><i data-lucide="credit-card" aria-hidden="true"></i>Cicilan</a>
+      <a href="#simpanan" class="special-book-link" data-book-route="savings"><i data-lucide="vault" aria-hidden="true"></i>Simpanan</a>
     </nav>
 
-    <div class="dashboard-content">
+    <div class="dashboard-content" id="dashboardPage">
       <section id="overview" class="overview-section" aria-label="Ringkasan periode">
         <div class="section-heading period-toolbar">
           <div><p class="eyebrow">Ringkasan keuangan</p><h2 id="periodLabel">Bulan aktif</h2></div>
@@ -87,11 +90,17 @@
       </div>
       <footer class="app-footer"><span>Catatan Keuangan</span><span>powered by pangestufm</span></footer>
     </div>
+    <section class="books-page" id="installmentsPage" data-book-page="installments" aria-labelledby="installmentPageTitle" hidden></section>
+    <section class="books-page" id="savingsPage" data-book-page="savings" aria-labelledby="savingsPageTitle" hidden></section>
   </main>
 
   <dialog class="drawer tools-panel" id="toolsPanel" aria-labelledby="toolsTitle">
     <div class="tools-panel-card"><div class="modal-heading"><div><p class="eyebrow">Workspace</p><h2 id="toolsTitle">Data &amp; tampilan</h2></div><button class="icon-button" id="closeToolsPanelButton" type="button" aria-label="Tutup menu data"><i data-lucide="x" aria-hidden="true"></i></button></div>
       <div class="tools-panel-actions">
+        <p class="menu-label">Pembukuan</p>
+        <a class="menu-button" href="#overview" data-book-route="dashboard"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Transaksi harian</span></a>
+        <a class="menu-button" href="#cicilan" data-book-route="installments"><i data-lucide="credit-card" aria-hidden="true"></i><span>Cicilan<small>Kewajiban &amp; riwayat pembayaran</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
+        <a class="menu-button" href="#simpanan" data-book-route="savings"><i data-lucide="vault" aria-hidden="true"></i><span>Tabungan &amp; simpanan<small>Tabungan, investasi, simpanan</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></a>
         <p class="menu-label">Impor</p>
         <button class="menu-button" id="bankUploadButton" type="button"><i data-lucide="landmark" aria-hidden="true"></i><span>Mutasi bank AI<small>PDF, gambar atau spreadsheet</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></button>
         <input id="bankStatementInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.xls" hidden />
@@ -102,7 +111,7 @@
         <button class="menu-button" id="exportExcelButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i><span>Download Excel<small>Termasuk referensi transaksi bank</small></span><i data-lucide="download" aria-hidden="true"></i></button>
         <p class="menu-label">Preferensi</p>
         <button class="menu-button" id="themeToggle" type="button">Ganti tema</button>
-        <button class="menu-button danger" id="clearButton" type="button"><i data-lucide="trash-2" aria-hidden="true"></i><span>Hapus semua transaksi</span></button>
+        <button class="menu-button danger" id="clearButton" type="button"><i data-lucide="trash-2" aria-hidden="true"></i><span>Hapus transaksi harian</span></button>
       </div>
     </div>
   </dialog>
@@ -145,7 +154,9 @@
   <script src="bank-reconciliation.js?v=20260916-reconcile"></script>
   <script src="bank-document.js?v=20260917-nexos"></script>
   <script src="currency-input.js?v=20261003-rupiah"></script>
-  <script src="dashboard-ui.js?v=20261004-motion"></script>
-  <script src="app.js?v=20261004-motion"></script>
+  <script src="dashboard-ui.js?v=20261006-books"></script>
+  <script src="financial-books-model.js?v=20261006-books"></script>
+  <script src="financial-books.js?v=20261006-master"></script>
+  <script src="app.js?v=20261006-books"></script>
 </body>
 </html>

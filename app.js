@@ -71,6 +71,7 @@ const state = {
   storageMode: "local",
   activeApiUrl: "",
   workspaceId: "",
+  sessionGeneration: 0,
   accessToken: "",
   isLocalOnly: false,
   lastOnlineError: "",
@@ -320,6 +321,8 @@ function enterLocalMode() {
 }
 
 function startAppSession() {
+  state.sessionGeneration += 1;
+  elements.importExcelInput.value = "";
   document.body.dataset.session = "app";
   elements.loginScreen.classList.add("hidden");
   elements.appShell.classList.remove("hidden");
@@ -330,13 +333,19 @@ function startAppSession() {
   resetForm();
   render();
 
+  const specialSession = {
+    workspaceId: state.workspaceId, accessToken: state.accessToken, isLocalOnly: state.isLocalOnly,
+  };
+
   if (state.isLocalOnly) {
     state.storageMode = "local";
     updateStorageStatus(`Mode Lokal · ${state.workspaceId}`, "Data tersimpan di browser perangkat ini.");
+    window.FinancialBooks?.startSession(specialSession);
     return;
   }
 
   initializeOnlineStorage();
+  window.FinancialBooks?.startSession(specialSession);
 }
 
 function showLogin() {
@@ -353,6 +362,8 @@ function showLogin() {
 }
 
 function logout() {
+  state.sessionGeneration += 1;
+  window.FinancialBooks?.endSession();
   localStorage.removeItem(AUTH_KEY);
   state.workspaceId = "";
   state.accessToken = "";
@@ -665,6 +676,7 @@ function handleSubmit(event) {
 async function importExcelFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+  const sessionAtStart = state.sessionGeneration;
   closeToolsPanel(false);
 
   if (!window.XLSX) {
@@ -676,10 +688,22 @@ async function importExcelFile(event) {
   try {
     showImportStatus(`Membaca ${file.name}...`, "info");
     const buffer = await file.arrayBuffer();
+    if (state.sessionGeneration !== sessionAtStart) return;
     const workbook = readImportWorkbook(buffer, file.name);
+    const hasSpecialBooks = workbook.SheetNames.some((name) => (
+      XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: true, defval: null }).some(isSpecialBookBackupHeader)
+    ));
+    const specialBooks = window.FinancialBooks?.parseBackup(workbook);
+    if (hasSpecialBooks && !specialBooks) throw new Error("Backup pembukuan khusus tidak didukung atau parser belum tersedia.");
+    if (specialBooks) await window.FinancialBooks.reviewImport(specialBooks);
+    if (state.sessionGeneration !== sessionAtStart) return;
     const importedTransactions = parseWorkbookTransactions(workbook);
 
     if (!importedTransactions.length) {
+      if (specialBooks) {
+        showImportStatus('Backup pembukuan khusus ditinjau. Tidak ada transaksi harian dalam file ini.', 'info');
+        return;
+      }
       showImportStatus("Tidak ada transaksi yang ditemukan. Pastikan format kolom sesuai contoh Excel atau file backup aplikasi.", "error");
       return;
     }
@@ -698,6 +722,7 @@ async function importExcelFile(event) {
       accept: "Impor transaksi",
     });
     if (!confirmed) return;
+    if (state.sessionGeneration !== sessionAtStart) return;
     newTransactions = getPendingImportedTransactions(importedTransactions);
     if (!newTransactions.length) {
       showImportStatus("Transaksi dalam backup sudah ada setelah sinkronisasi. Tidak ada duplikat yang ditambahkan.", "info");
@@ -713,10 +738,11 @@ async function importExcelFile(event) {
       "success",
     );
   } catch (error) {
+    if (state.sessionGeneration !== sessionAtStart) return;
     console.error(error);
     showImportStatus("Import gagal. File Excel/CSV mungkin rusak atau formatnya berbeda jauh dari contoh.", "error");
   } finally {
-    event.target.value = "";
+    if (state.sessionGeneration === sessionAtStart) event.target.value = "";
   }
 }
 
@@ -742,6 +768,7 @@ function readImportWorkbook(buffer, fileName) {
       });
     }
   });
+  window.FinancialBooks?.preserveCsvSheet(workbook, rawWorkbook);
   return workbook;
 }
 
@@ -1176,14 +1203,19 @@ function showBankImportStatus(message, type = "info") {
   elements.bankImportStatus.dataset.type = type;
 }
 
+function isSpecialBookBackupHeader(row) {
+  return typeof row?.[0] === "string" && /^Pembukuan khusus\b/i.test(row[0]);
+}
+
 function parseWorkbookTransactions(workbook) {
   const transactions = [];
 
   workbook.SheetNames.forEach((sheetName) => {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+    if (rows.some(isSpecialBookBackupHeader) && findBackupHeaderRowIndex(rows) < 0) return;
     const backupTransactions = parseBackupTransactionRows(rows, sheetName);
-    if (backupTransactions.length) {
+    if (findBackupHeaderRowIndex(rows) >= 0) {
       transactions.push(...backupTransactions);
       return;
     }
@@ -1261,7 +1293,9 @@ function parseBackupTransactionRows(rows, sheetName) {
     updatedAt: header.indexOf("diperbarui pada"),
   };
 
-  return rows.slice(headerRowIndex + 1).reduce((transactions, row, index) => {
+  const specialHeaderIndex = rows.findIndex(isSpecialBookBackupHeader);
+  const transactionRows = rows.slice(headerRowIndex + 1, specialHeaderIndex < 0 ? undefined : specialHeaderIndex);
+  return transactionRows.reduce((transactions, row, index) => {
     const rowNumber = headerRowIndex + index + 2;
     const description = cleanText(row[indexes.description]);
     const amount = parseAmount(row[indexes.amount]);
@@ -2520,18 +2554,20 @@ function getCategories() {
 }
 
 function exportCsv() {
-  if (!state.transactions.length) {
+  const specialRows = window.FinancialBooks?.exportRows() || [];
+  if (!state.transactions.length && !specialRows.length) {
     alert("Belum ada data untuk diexport.");
     return;
   }
 
-  const rows = buildExportRows();
+  const rows = [...buildExportRows(), ...(specialRows.length ? [[], ...specialRows] : [])];
   const csv = rows.map((row) => row.map(escapeCsvValue).join(",")).join("\r\n");
   downloadFile(`catatan-keuangan-${getTodayInputValue()}.csv`, `\ufeff${csv}`, "text/csv;charset=utf-8");
 }
 
 function exportExcel() {
-  if (!state.transactions.length) {
+  const specialRows = window.FinancialBooks?.exportRows() || [];
+  if (!state.transactions.length && !specialRows.length) {
     alert("Belum ada data untuk diexport.");
     return;
   }
@@ -2540,6 +2576,7 @@ function exportExcel() {
   const xmlRows = rows.map((row) => `
     <Row>${row.map((cell) => `<Cell><Data ss:Type="${typeof cell === "number" ? "Number" : "String"}">${escapeXml(String(cell))}</Data></Cell>`).join("")}</Row>
   `).join("");
+  const specialXmlRows = specialRows.map(row => `<Row>${row.map(cell => `<Cell><Data ss:Type="${typeof cell === 'number' ? 'Number' : 'String'}">${escapeXml(String(cell))}</Data></Cell>`).join('')}</Row>`).join('');
 
   const workbook = `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -2550,6 +2587,7 @@ function exportExcel() {
   <Worksheet ss:Name="Transaksi">
     <Table>${xmlRows}</Table>
   </Worksheet>
+  ${specialRows.length ? `<Worksheet ss:Name="Pembukuan Khusus"><Table>${specialXmlRows}</Table></Worksheet>` : ''}
 </Workbook>`;
 
   downloadFile(`catatan-keuangan-${getTodayInputValue()}.xls`, workbook, "application/vnd.ms-excel");
@@ -2584,13 +2622,14 @@ function buildExportRows() {
 
 async function clearAllData() {
   if (!state.transactions.length) return;
+  const sessionAtStart = state.sessionGeneration;
 
   const confirmed = await window.DashboardUI.confirm({
-    title: "Hapus seluruh history?",
-    message: `${state.transactions.length} transaksi di workspace ${state.workspaceId} akan dihapus, termasuk history bulan sebelumnya${state.isLocalOnly ? " dari browser ini" : " dari penyimpanan online dan browser ini"}. Export backup sebelum melanjutkan.`,
-    accept: "Hapus semua", danger: true,
+    title: "Hapus transaksi harian?",
+    message: `${state.transactions.length} transaksi harian di workspace ${state.workspaceId} akan dihapus, termasuk history bulan sebelumnya${state.isLocalOnly ? " dari browser ini" : " dari penyimpanan online dan browser ini"}. Cicilan dan Simpanan tetap utuh. Export backup sebelum melanjutkan.`,
+    accept: "Hapus transaksi harian", danger: true,
   });
-  if (!confirmed) return;
+  if (!confirmed || state.sessionGeneration !== sessionAtStart) return;
 
   state.transactions = [];
   saveTransactions();

@@ -140,6 +140,7 @@
   }
 
   function openEntry() {
+    window.FinancialBooks?.showDashboard();
     close(get('toolsPanel'));
     close(get('detailDialog'));
     const field = get('entryChatView').hidden ? get('descriptionInput') : get('chatInput');
@@ -150,6 +151,7 @@
   }
 
   function openDetails() {
+    window.FinancialBooks?.showDashboard();
     if (compact.matches) open(get('detailDialog'), get('closeDetailButton'));
     else get('transactionsSection').scrollIntoView({ block: 'start', behavior: reducedMotion.matches ? 'instant' : 'smooth' });
   }

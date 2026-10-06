@@ -18,6 +18,8 @@ const seed = [
   ]),
 ];
 const stores = new Map();
+const specialStores = new Map();
+const Books = require('../financial-books-model.js');
 const mime = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.mjs':'text/javascript', '.css':'text/css', '.ttf':'font/ttf', '.txt':'text/plain', '.csv':'text/csv' };
 
 function serve(port, fixtures) {
@@ -30,6 +32,26 @@ function serve(port, fixtures) {
       for await (const chunk of req) body += chunk;
       let payload;
       try { payload = body ? JSON.parse(body) : {}; } catch { return json(400, {error:'Invalid JSON'}); }
+      if (url.pathname.endsWith('/financial-books')) {
+        const workspace = req.headers['x-app-workspace'] || 'uji-ui';
+        if (!specialStores.has(workspace)) specialStores.set(workspace, { books: { accounts: [
+          { id: 'demo-loan', kind: 'installment', name: 'Cicilan rumah contoh', startDate: '2026-09-01', totalAmount: 60000000, openingBalance: 0, notes: 'Data contoh untuk uji tampilan.' },
+          { id: 'demo-savings', kind: 'savings', name: 'Dana darurat contoh', startDate: '2026-09-01', totalAmount: 0, openingBalance: 15000000, notes: 'Data contoh untuk uji tampilan.' },
+        ], entries: [
+          { id: 'demo-payment', accountId: 'demo-loan', kind: 'payment', date: '2026-10-01', amount: 5012278, description: 'Pembayaran Oktober contoh' },
+          { id: 'demo-savings-add', accountId: 'demo-savings', kind: 'deposit', date: '2026-10-02', amount: 1500000, description: 'Setoran contoh' },
+        ] }, revision: 0, appliedOperationIds: [] });
+        const stored = specialStores.get(workspace);
+        if (req.method === 'POST') {
+          if (stored.appliedOperationIds.includes(payload.operation?.id)) return json(200, stored);
+          if (payload.baseRevision !== stored.revision) return json(409, { error: 'Konflik versi simulasi' });
+          try {
+            const books = Books.applyOperation(stored.books, payload.operation);
+            specialStores.set(workspace, { books, revision: stored.revision + 1, appliedOperationIds: [...stored.appliedOperationIds, payload.operation.id] });
+          } catch (error) { return json(422, { error: error.message }); }
+        }
+        return json(200, specialStores.get(workspace));
+      }
       if (url.pathname.endsWith('transactions') || url.pathname.endsWith('transactions.php')) {
         const workspace = req.headers['x-app-workspace'] || 'uji-ui';
         if (!stores.has(workspace)) stores.set(workspace, JSON.parse(JSON.stringify(seed)));
@@ -61,5 +83,6 @@ function serve(port, fixtures) {
     } catch { json(404, {error:'Not found'}); }
   }).listen(port, '127.0.0.1', () => console.log(`Preview ${fixtures ? 'fixtures' : 'application'}: http://127.0.0.1:${port}/`));
 }
-serve(4175, true);
-serve(4176, false);
+const port = Number(process.env.PREVIEW_PORT || 4175);
+serve(port, true);
+serve(port + 1, false);

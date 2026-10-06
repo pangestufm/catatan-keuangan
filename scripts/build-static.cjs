@@ -10,6 +10,7 @@ if (fs.existsSync(output)) {
 }
 fs.mkdirSync(output);
 for (const file of ['index.html', 'styles.css', 'app.js', 'dashboard-ui.js',
+  'financial-books.js', 'financial-books-model.js', 'financial-books.css',
   'bank-document.js', 'bank-reconciliation.js', 'currency-input.js', 'vendor']) {
   fs.cpSync(path.join(root, file), path.join(output, file), { recursive: true });
 }

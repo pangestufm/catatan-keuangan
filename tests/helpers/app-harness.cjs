@@ -35,7 +35,8 @@ function createApp(rows = [], options = {}) {
   window.Blob = Blob;
   window.URL.createObjectURL = (blob) => { downloads.push(blob); return 'blob:fixture'; };
   window.URL.revokeObjectURL = () => {};
-  window.HTMLAnchorElement.prototype.click = function () {};
+  const clickAnchor = window.HTMLAnchorElement.prototype.click;
+  window.HTMLAnchorElement.prototype.click = function () { if (!this.download) clickAnchor.call(this); };
   window.fetch = async (url, request = {}) => {
     requests.push({ url, ...request });
     if (options.fetch) return options.fetch(url, request);
@@ -49,7 +50,7 @@ function createApp(rows = [], options = {}) {
   }));
   const storageKey = 'catatan-keuangan-transactions-regression-fixture';
   window.localStorage.setItem(storageKey, JSON.stringify(rows));
-  for (const file of ['currency-input.js', 'bank-reconciliation.js', 'dashboard-ui.js', 'app.js']) {
+  for (const file of ['currency-input.js', 'bank-reconciliation.js', 'dashboard-ui.js', 'financial-books-model.js', 'financial-books.js', 'app.js']) {
     if (fs.existsSync(path.join(root, file))) window.eval(fs.readFileSync(path.join(root, file), 'utf8'));
   }
   const setValue = (id, value, event = 'change') => {

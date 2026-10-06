@@ -288,7 +288,9 @@ test('CSV numerik desimal dan tanggal serial tetap dibaca tanpa mengubah referen
 
 test('backup dihitung ulang jika sync datang selagi konfirmasi masih terbuka', async t => {
   let release;
-  const app=createApp([], {fetch:()=>new Promise(resolve=>{release=resolve;})});t.after(app.close);
+  const app=createApp([], {fetch:url => url.includes('financial-books')
+    ? Promise.resolve({ ok:true, status:200, json:async()=>({ books:{ accounts:[], entries:[] }, revision:0, appliedOperationIds:[] }) })
+    : new Promise(resolve=>{release=resolve;})});t.after(app.close);
   app.get('workspaceInput').value='regression-fixture';
   app.get('accessTokenInput').value='fixture-only';
   app.call('handleLoginSubmit',{preventDefault(){}});

@@ -10,6 +10,7 @@ test('build produksi menyertakan aset aplikasi tanpa server fixture atau berkas 
   assert.equal(result.status, 0, result.stderr);
   const output = path.join(root, 'dist');
   for (const file of ['index.html', 'styles.css', 'app.js', 'dashboard-ui.js', 'bank-document.js',
+    'financial-books.js', 'financial-books-model.js', 'financial-books.css',
     'bank-reconciliation.js', 'currency-input.js', 'vendor/xlsx.full.min.js',
     'vendor/lucide.min.js', 'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
     'vendor/fonts/ibm-plex-sans-400.ttf']) {
