@@ -3,9 +3,10 @@
 // Bundled with esbuild into vendor/finance-stage.js (IIFE) so the page also works when opened from disk.
 import {
   WebGLRenderer, Scene, OrthographicCamera, AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, PlaneGeometry, MeshStandardMaterial, MeshBasicMaterial, ShadowMaterial, InstancedMesh, Mesh,
-  Object3D, Color, Vector3, BackSide, PCFSoftShadowMap, SRGBColorSpace, MathUtils,
+  BoxGeometry, PlaneGeometry, MeshStandardMaterial, MeshPhysicalMaterial, MeshBasicMaterial, ShadowMaterial,
+  InstancedMesh, Mesh, Object3D, Color, Vector3, BackSide, PCFSoftShadowMap, SRGBColorSpace, MathUtils, PMREMGenerator,
 } from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 const MAX_MONTHS = 6;
 const SLOT = 1.75;            // distance between months on the desk
@@ -98,9 +99,13 @@ class Stage {
     this.scene = scene;
     this.camera = new OrthographicCamera(-5, 5, 3, -3, 0.1, 100);
 
-    scene.add(new HemisphereLight(0xfffaf0, 0xb9b0a0, 1.15));
-    scene.add(new AmbientLight(0xffffff, 0.25));
+    this.hemi = new HemisphereLight(0xfffaf0, 0xb9b0a0, 1.15);
+    this.ambient = new AmbientLight(0xffffff, 0.25);
+    this.rim = new DirectionalLight(0xfff1d6, 0);
+    this.rim.position.set(6, 5, -7);
+    scene.add(this.hemi, this.ambient, this.rim);
     const sun = new DirectionalLight(0xffffff, 1.6);
+    this.sun = sun;
     sun.position.set(-4, 9, 6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -119,6 +124,7 @@ class Stage {
     this.geometry = new BoxGeometry(BILL.w, 1, BILL.d);
     this.bandGeometry = new BoxGeometry(0.16, 1, BILL.d + 0.012);
     this.matTag = new MeshStandardMaterial({ roughness: 0.9 });
+    this.matTagMetal = new MeshStandardMaterial({ roughness: 0.3, metalness: 0.9 });
     this.tag = new Mesh(new BoxGeometry(SLOT * 0.9, 0.02, 1.3), this.matTag);
     this.tag.receiveShadow = true;
     this.tag.visible = false;
@@ -126,16 +132,26 @@ class Stage {
 
     const capacity = MAX_MONTHS * MAX_LAYERS;
     this.layers = {};
+    // Two looks for the same bundles: 'ink' (paper clay with a marker outline) and 'metal'
+    // (studio-lit gold bullion and dark lacquer). The skin picks one through --stage-style.
     for (const kind of ['income', 'expense']) {
-      const fill = new MeshStandardMaterial({ roughness: 0.72, metalness: 0, transparent: true });
+      const fills = {
+        ink: new MeshStandardMaterial({ roughness: 0.72, metalness: 0, transparent: true }),
+        metal: kind === 'income'
+          ? new MeshPhysicalMaterial({ metalness: 1, roughness: 0.34, clearcoat: 0.25, clearcoatRoughness: 0.3, transparent: true })
+          : new MeshPhysicalMaterial({ metalness: 0.1, roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.25, transparent: true }),
+      };
+      const bandsMat = {
+        ink: new MeshStandardMaterial({ roughness: 0.85, transparent: true }),
+        metal: new MeshStandardMaterial({ roughness: 0.45, metalness: 0.6, transparent: true }),
+      };
       const ink = new MeshBasicMaterial({ side: BackSide });
-      const band = new MeshStandardMaterial({ roughness: 0.85, transparent: true });
-      const body = new InstancedMesh(this.geometry, fill, capacity);
+      const body = new InstancedMesh(this.geometry, fills.ink, capacity);
       const outline = new InstancedMesh(this.geometry, ink, capacity);
-      const bands = new InstancedMesh(this.bandGeometry, band, capacity);
+      const bands = new InstancedMesh(this.bandGeometry, bandsMat.ink, capacity);
       body.castShadow = true; body.receiveShadow = true;
       for (const mesh of [body, outline, bands]) { mesh.count = 0; mesh.frustumCulled = false; scene.add(mesh); }
-      this.layers[kind] = { body, outline, bands, fill, ink, band, items: [] };
+      this.layers[kind] = { body, outline, bands, fills, bandsMat, ink, items: [] };
     }
     this.dummy = new Object3D();
     this.applyColors();
@@ -143,16 +159,36 @@ class Stage {
 
   applyColors() {
     if (!this.gl) return;
-    const ink = new Color(cssColor('--ink', '#1b1a17'));
-    this.layers.income.fill.color.set(cssColor('--cobalt', '#2340d8'));
-    this.layers.expense.fill.color.set(cssColor('--tomato', '#bf3a22'));
-    for (const kind of ['income', 'expense']) {
-      this.layers[kind].ink.color.copy(ink);
-      this.layers[kind].band.color.set(cssColor('--sun', '#f7c948'));
-    }
-    this.matTag.color.set(cssColor('--sun', '#f7c948'));
+    const metal = cssColor('--stage-style', 'ink') === 'metal';
     const dark = document.documentElement.dataset.theme === 'dark';
-    this.floor.material.opacity = dark ? 0.42 : 0.16;
+    const ink = new Color(cssColor('--ink', '#1b1a17'));
+    for (const kind of ['income', 'expense']) {
+      const layer = this.layers[kind];
+      const color = metal ? cssColor(kind === 'income' ? '--stage-income' : '--stage-expense', '#b8954f') : cssColor(kind === 'income' ? '--cobalt' : '--tomato', '#2340d8');
+      layer.fills[metal ? 'metal' : 'ink'].color.set(color);
+      layer.bandsMat.ink.color.set(cssColor('--sun', '#f7c948'));
+      layer.bandsMat.metal.color.set(cssColor('--stage-band', '#2a2a2e'));
+      layer.body.material = layer.fills[metal ? 'metal' : 'ink'];
+      layer.bands.material = layer.bandsMat[metal ? 'metal' : 'ink'];
+      layer.ink.color.copy(ink);
+      layer.outline.visible = !metal;
+    }
+    if (metal && !this.envMap) {
+      const pmrem = new PMREMGenerator(this.renderer);
+      this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+    }
+    this.scene.environment = metal ? this.envMap : null;
+    this.scene.environmentIntensity = metal ? (dark ? 0.42 : 0.55) : 1;
+    this.hemi.intensity = metal ? (dark ? 0.12 : 0.35) : 1.15;
+    this.ambient.intensity = metal ? 0.05 : 0.25;
+    this.sun.intensity = metal ? (dark ? 1.25 : 1.1) : 1.6;
+    this.rim.intensity = metal ? (dark ? 1.6 : 0.6) : 0;
+    this.tag.material = metal ? this.matTagMetal : this.matTag;
+    this.matTag.color.set(cssColor('--sun', '#f7c948'));
+    this.matTagMetal.color.set(cssColor('--stage-tag', '#121214'));
+    this.floor.material.opacity = metal ? (dark ? 0.6 : 0.2) : (dark ? 0.42 : 0.16);
+    this.metal = metal;
     this.requestFrame();
   }
 
@@ -183,7 +219,7 @@ class Stage {
       input.value = button.dataset.month;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    new MutationObserver(() => this.applyColors()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    new MutationObserver(() => this.applyColors()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-skin'] });
     window.addEventListener('finance:motion', () => {
       this.motion = motionAllowed();
       if (!this.motion) { this.started = 1; this.pointer.tx = this.pointer.ty = 0; this.layout(true); }
@@ -273,7 +309,8 @@ class Stage {
     const d = this.dummy;
     let busy = false;
     for (const kind of ['income', 'expense']) {
-      const { body, outline, bands, items, fill, band } = this.layers[kind];
+      const { body, outline, bands, items } = this.layers[kind];
+      const fill = body.material, band = bands.material;
       items.forEach((item, i) => {
         const t = MathUtils.clamp((elapsed - item.delay) / 520, 0, 1);
         if (t < 1) busy = true;

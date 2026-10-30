@@ -2067,7 +2067,9 @@ function renderDailyExpenseChart(selectedCategory) {
   const peakX = x(peak.day - 1);
   const peakY = y(peak.expense);
   const noteOnLeft = peakX > width * 0.68;
-  const peakDoodle = `<ellipse class="peak-doodle" aria-hidden="true" pathLength="100" cx="${peakX}" cy="${peakY}" rx="17" ry="12" transform="rotate(-10 ${peakX} ${peakY})"></ellipse><text class="peak-note" aria-hidden="true" x="${noteOnLeft ? peakX - 22 : peakX + 22}" y="${peakY + 6}" text-anchor="${noteOnLeft ? "end" : "start"}">puncak</text>`;
+  // Near the left axis the max label sits beside the peak, so the note drops under the circle instead.
+  const noteBelow = !noteOnLeft && peakX < pad.left + 70;
+  const peakDoodle = `<ellipse class="peak-doodle" aria-hidden="true" pathLength="100" cx="${peakX}" cy="${peakY}" rx="17" ry="12" transform="rotate(-10 ${peakX} ${peakY})"></ellipse><text class="peak-note" aria-hidden="true" x="${noteOnLeft ? peakX - 22 : noteBelow ? peakX + 6 : peakX + 22}" y="${noteBelow ? peakY + 34 : peakY + 6}" text-anchor="${noteOnLeft ? "end" : "start"}">puncak</text>`;
 
   elements.dailyExpenseChart.innerHTML = `
     <div class="trend-summary">

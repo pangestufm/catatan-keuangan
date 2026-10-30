@@ -10,6 +10,10 @@
   <link rel="preload" href="vendor/fonts/bricolage-grotesque-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="vendor/fonts/bricolage-grotesque-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
   <script>
+    /* The chosen skin applies before the first paint, so the page never flashes the other theme. */
+    try {
+      if (localStorage.getItem('catatan-keuangan-skin') === 'noir') document.documentElement.dataset.skin = 'noir';
+    } catch (error) { /* storage blocked: default skin */ }
     /* Hide-then-reveal only runs when motion.js is there to reveal; otherwise content stays plainly visible. */
     try {
       if (localStorage.getItem('catatan-keuangan-motion') !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -20,6 +24,7 @@
   </script>
   <link rel="stylesheet" href="styles.css?v=20261030-remake" />
   <link rel="stylesheet" href="financial-books.css?v=20261030-remake" />
+  <link rel="stylesheet" href="theme-noir.css?v=20261030-noir" />
 </head>
 <body>
   <a class="skip-link" id="skipContentLink" href="#overview">Lewati navigasi</a>
@@ -145,6 +150,11 @@
         <p class="menu-label">Export seluruh history</p>
         <button class="menu-button" id="exportCsvButton" type="button"><i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Download CSV<small>Kompatibel dengan Google Sheets</small></span><i data-lucide="download" aria-hidden="true"></i></button>
         <button class="menu-button" id="exportExcelButton" type="button"><i data-lucide="sheet" aria-hidden="true"></i><span>Download Excel<small>Termasuk referensi transaksi bank</small></span><i data-lucide="download" aria-hidden="true"></i></button>
+        <p class="menu-label">Tampilan</p>
+        <div class="skin-picker" role="group" aria-label="Gaya tampilan">
+          <button class="skin-option" type="button" data-skin-choice="spidol" aria-pressed="true"><span class="skin-swatch skin-swatch-spidol" aria-hidden="true"></span><span>Buku Kas Spidol<small>Kertas, spidol, stabilo</small></span></button>
+          <button class="skin-option" type="button" data-skin-choice="noir" aria-pressed="false"><span class="skin-swatch skin-swatch-noir" aria-hidden="true"></span><span>Noir Emas<small>Hitam, emas, minimalis</small></span></button>
+        </div>
         <p class="menu-label">Preferensi</p>
         <button class="menu-button" id="themeToggle" type="button">Ganti tema</button>
         <button class="menu-button" id="motionToggle" type="button" aria-pressed="true"><i data-lucide="box" aria-hidden="true"></i><span>Animasi meja kas<small>Matikan bila perangkat terasa berat</small></span></button>
