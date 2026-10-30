@@ -48,21 +48,6 @@
   }, { threshold: [0, 0.15, 0.3, 0.5, 0.75], rootMargin: '-120px 0px -35% 0px' });
   targets.forEach((el) => spy.observe(el));
 
-  // Skin: Buku Kas Spidol (default) or Noir Emas. Applied before first paint by the inline head script.
-  const SKIN_KEY = 'catatan-keuangan-skin';
-  const skinButtons = document.querySelectorAll('[data-skin-choice]');
-  const currentSkin = () => (root.dataset.skin === 'noir' ? 'noir' : 'spidol');
-  const syncSkin = () => skinButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.skinChoice === currentSkin())));
-  skinButtons.forEach((button) => button.addEventListener('click', () => {
-    const skin = button.dataset.skinChoice;
-    if (skin === 'noir') root.dataset.skin = 'noir';
-    else delete root.dataset.skin;
-    try { localStorage.setItem(SKIN_KEY, skin); } catch { /* keep for this visit only */ }
-    syncSkin();
-    window.dispatchEvent(new Event('finance:skin'));
-  }));
-  syncSkin();
-
   sync();
   root.classList.add('motion-ready');
 })();
