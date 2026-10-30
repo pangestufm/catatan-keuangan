@@ -1816,6 +1816,9 @@ function renderTotals() {
   elements.expenseTotal.closest(".metric-card").dataset.tooltip = `Pengeluaran ${periodLabel}: ${formatCurrency(totals.expense)}`;
   elements.balanceTotal.closest(".metric-card").dataset.tooltip = `${formatCurrency(totals.income)} masuk - ${formatCurrency(totals.expense)} keluar = ${formatCurrency(totals.balance)}`;
   document.querySelector('#transactionTotal').closest('.metric-card').dataset.tooltip = `${transactions.filter(item => item.type === 'income').length} pemasukan dan ${transactions.filter(item => item.type === 'expense').length} pengeluaran pada ${periodLabel}`;
+  // Read-only hand-off to the desk stage (loaded later with defer, so the latest figures also wait on window).
+  window.__financeStageData = { points: buildTrendPoints(state.transactions, "monthly"), activeMonth: state.filters.month };
+  window.dispatchEvent(new CustomEvent("finance:data", { detail: window.__financeStageData }));
   window.DashboardUI.animateUpdate(document.querySelector('.summary-grid'), 'overview');
   [elements.incomeTotal, elements.expenseTotal, elements.balanceTotal, document.querySelector('#transactionTotal')].forEach(element => window.DashboardUI.animateUpdate(element));
 }
@@ -2060,6 +2063,11 @@ function renderDailyExpenseChart(selectedCategory) {
   const totalExpense = points.reduce((sum, point) => sum + point.expense, 0);
   const activeDays = points.filter((point) => point.expense > 0).length;
   const peak = points.reduce((highest, point) => point.expense > highest.expense ? point : highest, points[0]);
+  // A marker circle around the highest day, with its note written beside it (never above: the peak sits at the top edge).
+  const peakX = x(peak.day - 1);
+  const peakY = y(peak.expense);
+  const noteOnLeft = peakX > width * 0.68;
+  const peakDoodle = `<ellipse class="peak-doodle" aria-hidden="true" pathLength="100" cx="${peakX}" cy="${peakY}" rx="17" ry="12" transform="rotate(-10 ${peakX} ${peakY})"></ellipse><text class="peak-note" aria-hidden="true" x="${noteOnLeft ? peakX - 22 : peakX + 22}" y="${peakY + 6}" text-anchor="${noteOnLeft ? "end" : "start"}">puncak</text>`;
 
   elements.dailyExpenseChart.innerHTML = `
     <div class="trend-summary">
@@ -2085,6 +2093,7 @@ function renderDailyExpenseChart(selectedCategory) {
           return `<line class="grid-line" x1="${pad.left}" y1="${gridY}" x2="${width - pad.right}" y2="${gridY}"></line>`;
         }).join("")}
         <path class="trend-line expense-line" d="${linePath}"></path>
+        ${peakDoodle}
         ${activePoints.map((point, activeIndex) => `
           <g class="trend-point" tabindex="0" role="button" aria-label="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}" data-tooltip="${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}">
             <title>${escapeHtml(`${point.label} ${formatMonthLabel(activeMonth)} | Pengeluaran ${formatCurrency(point.expense)}`)}</title>
