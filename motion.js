@@ -27,13 +27,15 @@
   reduced.addEventListener?.('change', sync);
 
   // Sections already on screen at load reveal at once; the rest reveal as they scroll in.
+  // Any visible pixel counts: a ratio threshold never fires for a section taller than the screen
+  // (a long transaction ledger), which then stayed hidden.
   const reveal = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       entry.target.classList.add('in');
       reveal.unobserve(entry.target);
     });
-  }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+  }, { threshold: 0, rootMargin: '0px 0px -6% 0px' });
   document.querySelectorAll('[data-reveal]').forEach((el) => reveal.observe(el));
 
   // The nav marker follows the section being read.
