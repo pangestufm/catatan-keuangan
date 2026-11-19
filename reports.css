@@ -1,0 +1,151 @@
+/* Laporan & neraca: the ledger's year-end pages. Same paper, ink and marker as the dashboard;
+   health status reads cobalt (sehat), sunflower (cukup) or tomato (waspada), always with a word. */
+.report-page { max-width: 1328px; margin: auto; padding: 30px 24px 120px; display: grid; gap: 30px; min-width: 0; }
+.report-heading { align-items: flex-end; flex-wrap: wrap; margin-bottom: 0; }
+.report-heading h2 { font-size: 34px; letter-spacing: -.03em; }
+.report-period-line { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.report-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+.report-controls .segmented-control { align-self: flex-end; }
+.report-block { min-width: 0; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 24px; }
+.report-block .section-heading { align-items: flex-start; flex-wrap: wrap; }
+.report-block h3 { font-size: 22px; letter-spacing: -.015em; }
+.household-field { width: 250px; }
+.report-subtitle { font-size: 15px; margin: 28px 0 12px; }
+.negative { color: var(--expense); }
+
+/* ---------- Scorecard ---------- */
+.score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.score-card { --tone: var(--muted); --tone-soft: var(--soft); position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 18px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--bg); transition: border-color 160ms ease, transform 220ms var(--ease); }
+.score-card.status-good { --tone: var(--income); --tone-soft: color-mix(in srgb, var(--income) 13%, transparent); }
+.score-card.status-fair { --tone: #8a6100; --tone-soft: var(--sun-soft); }
+.score-card.status-poor { --tone: var(--expense); --tone-soft: color-mix(in srgb, var(--expense) 13%, transparent); }
+.score-card.status-incomplete, .score-card.status-na { border-style: dashed; }
+:root[data-theme='dark'] .score-card.status-fair { --tone: var(--sun); }
+.score-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.score-top h4 { margin: 0; font-size: 14.5px; line-height: 1.3; font-weight: 700; }
+.score-top svg { color: var(--tone); }
+.score-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.score-value strong { font-size: 34px; line-height: 1; font-weight: 800; letter-spacing: -.03em; }
+.score-status { display: inline-flex; align-items: center; min-height: 26px; padding: 3px 10px; border-radius: 999px; background: var(--tone-soft); color: var(--tone); font-size: 12.5px; font-weight: 700; }
+.status-fair .score-status { color: var(--ink); }
+.status-incomplete .score-status, .status-na .score-status { background: var(--soft); color: var(--muted); }
+.gauge { position: relative; height: 10px; margin: 2px 0 20px; border-radius: 999px; background: var(--soft); }
+.gauge-fill { position: absolute; inset: 0 auto 0 0; width: var(--fill); max-width: 100%; border-radius: inherit; background: var(--tone); transform-origin: left; transition: transform 900ms var(--ease), width 500ms var(--ease); }
+.gauge-mark { position: absolute; top: -4px; bottom: -4px; left: var(--at); width: 2px; margin-left: -1px; background: var(--ink); border-radius: 2px; }
+.gauge-mark b { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+/* Two close thresholds (30% and 35%) put their labels on either side of the line instead of on top of each other. */
+.gauge-mark.align-end b { transform: translateX(calc(-100% - 2px)); }
+.gauge-mark.align-start b { transform: translateX(3px); }
+.score-figures { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.score-figures .numeric { color: var(--ink); font-weight: 600; font-size: 13.5px; overflow-wrap: anywhere; }
+.score-ideal, .score-extra { font-size: 12.5px; color: var(--muted); }
+.score-note { margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--border); font-family: var(--hand); font-weight: 700; font-size: 15.5px; line-height: 1.3; color: var(--ink); }
+.score-note a { color: var(--accent); }
+@media (hover: hover) and (pointer: fine) { .score-card:hover { border-color: var(--ink); transform: translateY(-2px); } }
+
+/* ---------- Statement ---------- */
+.statement-wrap, .year-wrap { border: 1.5px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.statement-table, .year-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14.5px; }
+.statement-table thead th, .year-table thead th { padding: 12px 16px; background: var(--soft); color: var(--muted); font-size: 12.5px; font-weight: 600; text-align: left; }
+.statement-table thead th:nth-child(2), .statement-table thead th:nth-child(3) { width: 180px; }
+.statement-table thead th:nth-child(4) { width: 110px; }
+.statement-table th[scope='row'], .statement-table td, .year-table th[scope='row'], .year-table td { padding: 10px 16px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.statement-table th[scope='row'] { text-align: left; font-weight: 500; }
+.statement-table th small { display: block; font-size: 12px; font-weight: 400; }
+.report-page .numeric { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+.statement-table thead .numeric, .year-table thead .numeric { text-align: right; }
+.statement-line th[scope='row'] { padding-left: 34px; color: var(--muted); }
+.statement-line td { color: var(--muted); }
+.statement-group th[scope='row'], .statement-group td { font-weight: 700; background: color-mix(in srgb, var(--soft) 45%, transparent); }
+.statement-subtotal th[scope='row'], .statement-subtotal td, .statement-total th[scope='row'], .statement-total td { font-weight: 800; border-top: 1.5px solid var(--ink); }
+.statement-total th[scope='row'], .statement-total td { font-size: 16px; padding-top: 14px; padding-bottom: 14px; background: var(--sun-soft); }
+.statement-total th small { font-size: 12px; font-weight: 500; }
+.statement-delta, .delta-inline { font-size: 13px; font-weight: 600; }
+.delta-inline { display: none; }
+.statement-delta.up, .delta-inline.up { color: var(--income); }
+.statement-delta.down, .delta-inline.down { color: var(--expense); }
+.year-wrap { margin-top: 0; }
+.year-table tbody th[scope='row'] { font-weight: 600; }
+.year-table tfoot th, .year-table tfoot td { font-weight: 800; border-top: 1.5px solid var(--ink); background: var(--sun-soft); padding: 12px 16px; }
+
+/* ---------- Balance sheet ---------- */
+.balance-callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; margin-bottom: 18px; border-radius: var(--radius-sm); background: var(--sun-soft); color: var(--ink); font-size: 14px; }
+.balance-callout a { color: var(--accent); font-weight: 600; }
+.balance-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.balance-side { min-width: 0; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 18px; display: flex; flex-direction: column; gap: 16px; background: var(--bg); }
+.balance-side h4 { margin: 0; font-size: 17px; }
+.balance-group h5 { margin: 0 0 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.balance-group ul { list-style: none; margin: 0; padding: 0; }
+.balance-group li { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px dashed var(--border); min-width: 0; }
+.balance-group li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.balance-group li small { display: block; font-size: 12px; }
+.balance-group li .numeric { flex-shrink: 0; font-weight: 600; }
+.balance-empty { color: var(--muted); }
+.balance-subtotal { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; font-weight: 700; font-size: 14px; }
+.balance-total { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 2px solid var(--ink); font-weight: 800; font-size: 16px; }
+.net-worth-figure { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1.2; margin: 4px 0 2px; }
+.net-worth-figure .marked { white-space: normal; }
+
+/* ---------- Method ---------- */
+.report-method { border: 1.5px dashed var(--control-border); border-radius: var(--radius); padding: 0 22px; background: transparent; }
+.report-method summary { min-height: 56px; display: flex; align-items: center; font-weight: 700; }
+.report-method[open] summary { border-bottom: 1px dashed var(--border); }
+.report-method-body { display: grid; gap: 12px; padding: 16px 0 22px; font-size: 14px; max-width: 78ch; }
+.report-method-body ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.report-method-body a { color: var(--accent); }
+
+/* ---------- Motion: cards rise and gauges fill once the scorecard scrolls in ---------- */
+html.motion .scorecard .score-card { transition: opacity 600ms var(--ease), transform 700ms var(--ease), border-color 160ms ease; }
+html.motion .scorecard:not(.in) .score-card { opacity: 0; transform: translateY(16px); }
+html.motion .scorecard:not(.in) .gauge-fill { transform: scaleX(0); }
+html.motion .scorecard.in .score-card:nth-child(2) { transition-delay: 90ms; }
+html.motion .scorecard.in .score-card:nth-child(3) { transition-delay: 160ms; }
+html.motion .scorecard.in .score-card:nth-child(4) { transition-delay: 230ms; }
+html.motion .scorecard.in .gauge-fill { transition-delay: 320ms; }
+
+@media (max-width: 1180px) { .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .report-page { padding: 24px 20px 110px; gap: 24px; }
+  .balance-sheet { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .report-page { padding: 18px 14px 110px; gap: 20px; }
+  .report-heading h2 { font-size: 28px; }
+  .report-controls { width: 100%; }
+  .report-controls .segmented-control { width: 100%; }
+  .report-controls .segmented-control button { flex: 1; }
+  .report-controls .compact-filter { flex: 1; width: auto; }
+  .report-block { padding: 16px; border-radius: var(--radius-md); }
+  .household-field { width: 100%; }
+  .score-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .score-value strong { font-size: 30px; }
+  .statement-table { font-size: 13.5px; }
+  .statement-table .statement-prev, .statement-table .statement-delta { display: none; }
+  .statement-table thead th:nth-child(2) { width: 142px; }
+  .statement-table .amount { white-space: nowrap; }
+  .delta-inline { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+  .statement-table th[scope='row'], .statement-table td { padding: 9px 10px; }
+  .statement-line th[scope='row'] { padding-left: 20px; }
+  .year-wrap { border: 0; border-radius: 0; }
+  .year-table, .year-table tbody, .year-table tfoot { display: block; }
+  .year-table thead { display: none; }
+  .year-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; padding: 14px 2px; border-top: 1px solid var(--border); }
+  .year-table tfoot tr { background: var(--sun-soft); border-radius: var(--radius-sm); padding: 14px 12px; border-top: 1.5px solid var(--ink); }
+  .year-table th[scope='row'] { grid-column: 1 / -1; padding: 0; border: 0; font-size: 15px; text-align: left; }
+  .report-page .year-table td.numeric { align-items: flex-start; text-align: left; font-weight: 600; }
+  .year-table td, .year-table tfoot td, .year-table tfoot th { padding: 0; border: 0; background: transparent; text-align: left; display: flex; flex-direction: column; font-size: 14px; }
+  .year-table td::before { content: attr(data-label); font-size: 12px; font-weight: 500; color: var(--muted); }
+  .balance-side { padding: 14px; }
+  .net-worth-figure { font-size: 26px; }
+  .report-method { padding: 0 16px; }
+}
+
+@media print {
+  .topbar, .main-nav, .report-controls .button, .report-controls .segmented-control, .floating-button, .skip-link, .toast { display: none !important; }
+  body { background: #fff; }
+  .report-page { padding: 0; max-width: none; }
+  .report-block, .balance-side, .score-card { break-inside: avoid; background: #fff; }
+  .report-method { display: none; }
+  html.motion .scorecard .score-card { opacity: 1 !important; transform: none !important; }
+  html.motion .scorecard .gauge-fill { transform: none !important; }
+}

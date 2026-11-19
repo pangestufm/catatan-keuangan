@@ -30,3 +30,18 @@ test('section lebih tinggi dari layar tetap muncul begitu sebagian kecilnya terl
   reveal.callback([{ target: ledger, isIntersecting: true, intersectionRatio: 0.02 }]);
   assert.ok(ledger.classList.contains('in'));
 });
+
+test('penanda menu Ringkasan dan lainnya hilang saat pindah ke halaman Cicilan, Simpanan atau Laporan', (t) => {
+  const { window, observers } = loadMotion();
+  t.after(() => window.close());
+  const spy = observers.find((o) => o.targets.some((el) => el.id === 'overview') && [].concat(o.options.threshold).length > 1);
+  const overviewLink = window.document.querySelector('.main-nav a[href="#overview"]');
+  spy.callback([{ target: window.document.getElementById('overview'), isIntersecting: true, intersectionRatio: 0.8 }]);
+  assert.ok(overviewLink.classList.contains('is-current'));
+  window.document.body.dataset.bookPage = 'reports';
+  window.dispatchEvent(new window.CustomEvent('finance:route', { detail: { route: 'reports' } }));
+  assert.equal(overviewLink.classList.contains('is-current'), false);
+  window.document.body.dataset.bookPage = 'dashboard';
+  window.dispatchEvent(new window.CustomEvent('finance:route', { detail: { route: 'dashboard' } }));
+  assert.ok(overviewLink.classList.contains('is-current'), 'kembali ke dashboard, penanda muncul lagi');
+});

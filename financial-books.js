@@ -12,9 +12,9 @@
   const dateLabel = value => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const id = () => window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  const kinds = { installment: 'Cicilan', savings: 'Tabungan', investment: 'Investasi', deposit: 'Simpanan' };
+  const kinds = { installment: 'Cicilan', savings: 'Tabungan', investment: 'Investasi', deposit: 'Simpanan', asset: 'Aset lain' };
   const entryNames = { payment: 'Pembayaran', deposit: 'Setoran', withdrawal: 'Penarikan' };
-  const icons = { installment: 'credit-card', savings: 'piggy-bank', investment: 'chart-no-axes-combined', deposit: 'vault' };
+  const icons = { installment: 'credit-card', savings: 'piggy-bank', investment: 'chart-no-axes-combined', deposit: 'vault', asset: 'house' };
   const views = {
     installments: { prefix: 'installment', host: 'installmentsPage', title: 'Cicilan', item: 'cicilan', selected: '', month: '' },
     savings: { prefix: 'savings', host: 'savingsPage', title: 'Tabungan & simpanan', item: 'rekening', selected: '', month: '' },
@@ -35,7 +35,7 @@
         <form id="${p}AccountForm" class="books-form"><input id="${p}AccountId" type="hidden" />
           <label>Nama ${view.item}<input id="${p}AccountName" type="text" maxlength="120" required /></label>
           <label>${debt ? 'Tanggal mulai' : 'Tanggal saldo awal'}<input id="${p}AccountDate" type="date" required /></label>
-          ${debt ? '' : `<label>Jenis<select id="${p}AccountKind"><option value="savings">Tabungan</option><option value="investment">Investasi</option><option value="deposit">Simpanan</option></select></label>`}
+          ${debt ? '' : `<label>Jenis<select id="${p}AccountKind"><option value="savings">Tabungan</option><option value="investment">Investasi</option><option value="deposit">Simpanan</option><option value="asset">Aset lain (rumah, kendaraan, emas)</option></select></label>`}
           <label><span>${debt ? 'Total kewajiban (Rp)' : 'Saldo awal (Rp)'}</span><input id="${p}AccountAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required /></label>
           <label class="books-wide">Catatan <span class="sr-only">opsional</span><input id="${p}AccountNotes" type="text" maxlength="1000" /></label>
           <p class="books-wide status-text" id="${p}AccountStatus" role="alert"></p><div class="books-form-actions books-wide"><button class="button primary" type="submit">Simpan ${view.item}</button><button class="button secondary" data-book-action="cancel-account" type="button">Batal</button></div>
@@ -99,12 +99,13 @@
   }
 
   function navigate(next, { updateHistory = true, focus = true } = {}) {
-    route = views[next] ? next : 'dashboard';
-    const hash = route === 'installments' ? '#cicilan' : route === 'savings' ? '#simpanan' : '#overview';
+    route = views[next] || next === 'reports' ? next : 'dashboard';
+    const hash = route === 'installments' ? '#cicilan' : route === 'savings' ? '#simpanan' : route === 'reports' ? '#laporan' : '#overview';
     if (updateHistory && window.location.hash !== hash) window.history.pushState(null, '', hash);
     for (const dialogId of ['toolsPanel', 'quickEntryModal', 'detailDialog']) window.DashboardUI.close(get(dialogId));
     get('dashboardPage').hidden = route !== 'dashboard';
     for (const [page, view] of Object.entries(views)) get(view.host).hidden = page !== route;
+    if (get('reportsPage')) get('reportsPage').hidden = route !== 'reports';
     document.body.dataset.bookPage = route;
     get('quickEntryButton').classList.toggle('hidden', route !== 'dashboard' || !session);
     get('detailToggleButton').classList.toggle('hidden', route !== 'dashboard' || !session);
@@ -115,7 +116,14 @@
     get('globalSearchInput').placeholder = route === 'dashboard' ? 'Cari transaksi...' : 'Cari transaksi harian...';
     get('skipContentLink')?.setAttribute('href', route === 'dashboard' ? '#overview' : hash);
     render();
-    if (focus && route !== 'dashboard') focusSection(`${views[route].prefix}PageTitle`);
+    window.dispatchEvent(new CustomEvent('finance:route', { detail: { route } }));
+    // On phones the tab row scrolls sideways; bring the open page's tab into view.
+    document.querySelector('.main-nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    if (focus && route !== 'dashboard') focusSection(pageTitle());
+  }
+
+  function pageTitle() {
+    return route === 'reports' ? 'reportPageTitle' : `${views[route].prefix}PageTitle`;
   }
 
   function showDashboard() {
@@ -123,7 +131,8 @@
   }
 
   function fromHash() {
-    navigate(window.location.hash === '#cicilan' ? 'installments' : window.location.hash === '#simpanan' ? 'savings' : 'dashboard', { updateHistory: false, focus: false });
+    const routes = { '#cicilan': 'installments', '#simpanan': 'savings', '#laporan': 'reports' };
+    navigate(routes[window.location.hash] || 'dashboard', { updateHistory: false, focus: false });
   }
 
   document.addEventListener('click', event => {
@@ -131,7 +140,7 @@
     if (link) { event.preventDefault(); navigate(link.dataset.bookRoute); return; }
     if (event.target.closest('.skip-link') && route !== 'dashboard') {
       event.preventDefault();
-      focusSection(`${views[route].prefix}PageTitle`);
+      focusSection(pageTitle());
       return;
     }
     if (event.target.closest('.main-nav a') && route !== 'dashboard') showDashboard();
@@ -411,6 +420,7 @@
       renderHistory(view);
     }
     renderStatus(); window.DashboardUI.refreshIcons();
+    window.dispatchEvent(new Event('finance:books'));
   }
   function renderHistory(view) {
     const p = view.prefix;

@@ -50,7 +50,7 @@ function createApp(rows = [], options = {}) {
   }));
   const storageKey = 'catatan-keuangan-transactions-regression-fixture';
   window.localStorage.setItem(storageKey, JSON.stringify(rows));
-  for (const file of ['currency-input.js', 'bank-reconciliation.js', 'dashboard-ui.js', 'financial-books-model.js', 'financial-books.js', 'app.js']) {
+  for (const file of ['currency-input.js', 'bank-reconciliation.js', 'dashboard-ui.js', 'financial-books-model.js', 'financial-books.js', 'finance-report-model.js', 'finance-report.js', 'category-picker.js', 'app.js']) {
     if (fs.existsSync(path.join(root, file))) window.eval(fs.readFileSync(path.join(root, file), 'utf8'));
   }
   const setValue = (id, value, event = 'change') => {

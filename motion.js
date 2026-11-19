@@ -42,13 +42,20 @@
   const links = [...document.querySelectorAll('.main-nav a[href^="#"]')].filter((a) => !a.dataset.bookRoute && a.id !== 'navQuickEntryButton');
   const targets = links.map((a) => document.querySelector(a.getAttribute('href'))).filter(Boolean);
   const current = new Map();
-  const spy = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => current.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0));
+  // Only the dashboard has sections to follow; on Cicilan, Simpanan or Laporan the page's own tab
+  // carries the marker, so the dashboard tabs are cleared as soon as the route changes.
+  function mark() {
     let best = null, bestRatio = 0;
     current.forEach((ratio, el) => { if (ratio > bestRatio) { best = el; bestRatio = ratio; } });
-    links.forEach((a) => a.classList.toggle('is-current', Boolean(best) && a.getAttribute('href') === `#${best.id}` && document.body.dataset.bookPage !== 'installments' && document.body.dataset.bookPage !== 'savings'));
+    const onDashboard = (document.body.dataset.bookPage || 'dashboard') === 'dashboard';
+    links.forEach((a) => a.classList.toggle('is-current', onDashboard && Boolean(best) && a.getAttribute('href') === `#${best.id}`));
+  }
+  const spy = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => current.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0));
+    mark();
   }, { threshold: [0, 0.15, 0.3, 0.5, 0.75], rootMargin: '-120px 0px -35% 0px' });
   targets.forEach((el) => spy.observe(el));
+  window.addEventListener('finance:route', mark);
 
   sync();
   root.classList.add('motion-ready');

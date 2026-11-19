@@ -51,7 +51,7 @@ NEXOS_API_KEY=isi_dengan_api_key_nexos
 NEXOS_MODEL=DeepSeek V4.1 Flash
 ```
 
-`APP_ACCESS_TOKEN` wajib untuk mode online. `NEXOS_API_KEY` diperlukan untuk chat, voice, dan impor mutasi bank. Hasil chat/voice tetap ditampilkan sebagai draft agar dapat diperiksa sebelum disimpan.
+`APP_ACCESS_TOKEN` wajib untuk mode online. Tanpa variabel ini semua Netlify Function menolak permintaan (503), bukan terbuka untuk siapa saja. `NEXOS_API_KEY` diperlukan untuk chat, voice, dan impor mutasi bank. Hasil chat/voice tetap ditampilkan sebagai draft agar dapat diperiksa sebelum disimpan.
 
 ### 3. Buat Netlify Database
 
@@ -114,11 +114,18 @@ Jika masih `Mode Lokal`, cek:
 - Rekonsiliasi unggahan mutasi yang periodenya tumpang tindih: semua baris tetap diperiksa dan diberi status `Baru`, `Sudah ada`, atau `Berubah` sebelum database diperbarui.
 - Transaksi lama tidak diinput ulang. Perubahan pada transaksi lama hanya diterapkan setelah barisnya dipilih secara manual di layar review.
 - Catat cepat dari chat, contoh: `belanja pizza tanggal 4 200000`.
+- Beberapa transaksi sekaligus dari satu pesan chat/voice: satu baris, atau dipisah koma/titik koma, untuk satu transaksi (contoh: `bensin 30rb, parkir 5rb`). Koma desimal seperti `1,5jt` tidak memisahkan. Semua draft ditinjau dulu, bisa dibuang satu per satu, lalu disimpan bersama.
+- Pilihan kategori selalu menampilkan seluruh kategori walau field sudah terisi; mengetik akan menyaring.
 - Agent AI Nexos `DeepSeek V4.1 Flash` untuk membaca konteks chat/voice dan otomatis menentukan jenis, tanggal, kategori, deskripsi, serta nominal. Jika Nexos gagal, aplikasi otomatis fallback ke parser lokal.
 - Voice input untuk catat cepat di browser yang mendukung Speech Recognition.
 - Draft konfirmasi sebelum transaksi dari chat/voice disimpan.
 - Trigger kategori eksplisit, contoh: `beli susu 25000 kategori makanan`.
 - Pembelajaran kategori lokal per workspace dari transaksi yang dikonfirmasi atau dikoreksi.
+- Halaman **Laporan & neraca** (`#laporan`), bulanan atau tahunan:
+  - Laporan arus kas per kategori dibanding periode sebelumnya. Kategori `Tabungan & Investasi` dibaca sebagai setoran/pencairan dan `Kewajiban & Cicilan` sebagai cicilan; sisa kas sama dengan saldo bersih di Ringkasan.
+  - Neraca per akhir periode dari buku Simpanan (tabungan, simpanan, investasi, aset lain seperti rumah/kendaraan/emas) dan sisa kewajiban di buku Cicilan.
+  - Scorecard 4 rasio: tabungan & investasi (ideal ≥20%, minimal 10%), cicilan/DSR (ideal ≤30%, batas 35%), likuiditas dana darurat (3-12 bulan sesuai susunan keluarga) dan solvabilitas (≥50%).
+  - Hanya membaca data; tidak ada transaksi atau pembukuan yang diubah.
 - Dark mode.
 - Export `.csv` untuk import ke Google Sheets sekaligus backup yang bisa diimport ulang ke aplikasi, termasuk referensi bank dan waktu pembaruan.
 - Export `.xls` untuk dibuka di Microsoft Excel sekaligus backup yang bisa diimport ulang ke aplikasi, termasuk referensi bank dan waktu pembaruan.

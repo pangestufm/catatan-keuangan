@@ -14,7 +14,8 @@ test('build produksi menyertakan aset aplikasi tanpa server fixture atau berkas 
     'bank-reconciliation.js', 'currency-input.js', 'vendor/xlsx.full.min.js',
     'vendor/lucide.min.js', 'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
     'motion.js', 'vendor/finance-stage.js', 'vendor/fonts/bricolage-grotesque-latin-400-normal.woff2',
-    'vendor/fonts/kalam-latin-700-normal.woff2']) {
+    'vendor/fonts/kalam-latin-700-normal.woff2', 'category-picker.js', 'finance-report-model.js',
+    'finance-report.js', 'reports.css', 'motion-boot.js']) {
     assert.ok(fs.existsSync(path.join(output, file)), file);
     assert.deepEqual(fs.readFileSync(path.join(output, file)), fs.readFileSync(path.join(root, file)));
   }
