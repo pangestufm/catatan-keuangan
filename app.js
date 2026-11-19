@@ -3,6 +3,7 @@ const STORAGE_PREFIX = "catatan-keuangan-transactions";
 const THEME_KEY = "catatan-keuangan-theme";
 const API_TOKEN_KEY = "catatan-keuangan-api-token";
 const AUTH_KEY = "catatan-keuangan-auth";
+const SYNC_PREFIX = "catatan-keuangan-sync";
 const LEARNING_PREFIX = "catatan-keuangan-learning";
 const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
 const PARSE_API_URLS = ["/.netlify/functions/parse-transaction"];
@@ -78,6 +79,8 @@ const state = {
   lastOnlineError: "",
   pendingDraft: null,
   pendingDrafts: [],
+  deletedIds: [],
+  restoredIds: [],
   bankImportDrafts: [],
   bankImportFileName: "",
   pdfJsPromise: null,
@@ -347,6 +350,7 @@ function startAppSession() {
   elements.quickEntryButton.classList.remove("hidden");
   elements.detailToggleButton.classList.remove("hidden");
   state.transactions = loadTransactions();
+  loadPendingSync();
   saveLocalTransactions();
   resetForm();
   render();
@@ -473,8 +477,12 @@ async function initializeOnlineStorage() {
     const remoteState = await fetchRemoteTransactions();
     state.storageMode = "online";
 
-    const mergedTransactions = mergeTransactions(remoteState.transactions, state.transactions);
-    const shouldPushMergedData = mergedTransactions.length !== remoteState.transactions.length;
+    const removed = new Set([...(Array.isArray(remoteState.deletedIds) ? remoteState.deletedIds : []), ...state.deletedIds]);
+    const restored = new Set(state.restoredIds);
+    const mergedTransactions = mergeTransactions(remoteState.transactions, state.transactions)
+      .filter((transaction) => !removed.has(transaction.id) || restored.has(transaction.id));
+    const shouldPushMergedData = mergedTransactions.length !== remoteState.transactions.length
+      || state.deletedIds.length > 0 || state.restoredIds.length > 0;
     state.transactions = mergedTransactions;
     saveLocalTransactions();
     render();
@@ -502,8 +510,12 @@ async function persistRemoteTransactions() {
   updateStorageStatus("Sinkronisasi", `Menyimpan perubahan workspace ${state.workspaceId} ke server...`);
 
   try {
-    const response = await apiRequest("PUT", { transactions: state.transactions });
+    const sentDeleted = [...state.deletedIds];
+    const sentRestored = [...state.restoredIds];
+    const response = await apiRequest("PUT", { transactions: state.transactions, deletedIds: sentDeleted, restoredIds: sentRestored });
     state.transactions = mergeTransactions(response.transactions, []);
+    // The server now holds these; ones added while the request ran stay pending for the next save.
+    settlePendingSync(sentDeleted, sentRestored);
     saveLocalTransactions();
     render();
     updateStorageStatus(`Mode Online · ${state.workspaceId}`, "Perubahan tersimpan di server.");
@@ -750,6 +762,7 @@ async function importExcelFile(event) {
       return;
     }
     state.transactions = [...newTransactions, ...state.transactions];
+    markRestored(newTransactions.map((item) => item.id));
     saveTransactions();
     resetForm();
     render();
@@ -1975,6 +1988,7 @@ async function handleTableAction(event) {
     if (!confirmed) return;
 
     state.transactions = state.transactions.filter((item) => item.id !== id);
+    markDeleted([id]);
     saveTransactions();
     render();
   }
@@ -2858,6 +2872,7 @@ async function clearAllData() {
   });
   if (!confirmed || state.sessionGeneration !== sessionAtStart) return;
 
+  markDeleted(state.transactions.map((item) => item.id));
   state.transactions = [];
   saveTransactions();
   resetForm();
@@ -2885,6 +2900,54 @@ function saveTransactions() {
 
 function saveLocalTransactions() {
   localStorage.setItem(getWorkspaceStorageKey(), JSON.stringify(state.transactions));
+}
+
+// Deletions and deliberate restores not yet confirmed by the server. Each device merges its own
+// copy with the server's on start, so without this list a deleted transaction still held by
+// another device's copy would be added back. Kept in storage so an offline deletion survives reload.
+function loadPendingSync() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(getSyncStorageKey()) || "{}");
+    const ids = (value) => (Array.isArray(value) ? value.filter((id) => typeof id === "string" && id) : []);
+    state.deletedIds = ids(saved.deletedIds);
+    state.restoredIds = ids(saved.restoredIds);
+  } catch {
+    state.deletedIds = [];
+    state.restoredIds = [];
+  }
+}
+
+function savePendingSync() {
+  if (!state.deletedIds.length && !state.restoredIds.length) localStorage.removeItem(getSyncStorageKey());
+  else localStorage.setItem(getSyncStorageKey(), JSON.stringify({ deletedIds: state.deletedIds, restoredIds: state.restoredIds }));
+}
+
+function markDeleted(ids) {
+  if (state.isLocalOnly) return;
+  const deleted = new Set(ids.filter(Boolean));
+  state.deletedIds = [...new Set([...state.deletedIds, ...deleted])];
+  state.restoredIds = state.restoredIds.filter((id) => !deleted.has(id));
+  savePendingSync();
+}
+
+function markRestored(ids) {
+  if (state.isLocalOnly) return;
+  const restored = new Set(ids.filter(Boolean));
+  state.restoredIds = [...new Set([...state.restoredIds, ...restored])];
+  state.deletedIds = state.deletedIds.filter((id) => !restored.has(id));
+  savePendingSync();
+}
+
+function settlePendingSync(sentDeleted, sentRestored) {
+  const deleted = new Set(sentDeleted);
+  const restored = new Set(sentRestored);
+  state.deletedIds = state.deletedIds.filter((id) => !deleted.has(id));
+  state.restoredIds = state.restoredIds.filter((id) => !restored.has(id));
+  savePendingSync();
+}
+
+function getSyncStorageKey() {
+  return `${SYNC_PREFIX}-${state.workspaceId || "lokal"}`;
 }
 
 function getWorkspaceStorageKey() {

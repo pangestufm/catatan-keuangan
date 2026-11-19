@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const LEGACY_BLOB_STORE_NAME = "catatan-keuangan";
+const MAX_DELETED_IDS = 20000;
 const STORAGE_NAME = "netlify-database";
 
 exports.handler = async (event) => {
@@ -36,8 +37,11 @@ exports.handler = async (event) => {
     }
 
     if (method === "DELETE") {
+      // Remember every cleared id, so a device still holding the old list cannot bring them back.
+      const current = await readState(workspaceId);
+      const deletedIds = await rememberDeleted(workspaceId, current.deletedIds, current.transactions.map((item) => item.id));
       await writeState(workspaceId, []);
-      return respond(200, { transactions: [], updatedAt: new Date().toISOString(), storage: STORAGE_NAME });
+      return respond(200, { transactions: [], deletedIds, updatedAt: new Date().toISOString(), storage: STORAGE_NAME });
     }
 
     if (method === "PUT" || method === "POST") {
@@ -50,9 +54,16 @@ exports.handler = async (event) => {
         return respond(422, { error: "Payload harus berisi transactions array." });
       }
 
-      const transactions = sanitizeTransactions(payload.transactions);
+      // Every save sends the device's whole list, and the app merges lists on start. Ids deleted on
+      // any device are kept here so an older copy elsewhere cannot add them back; a restore from
+      // backup names its ids in restoredIds to lift that.
+      const restored = new Set(sanitizeIds(payload.restoredIds));
+      const stored = (await readDeletedIds(workspaceId)).filter((id) => !restored.has(id));
+      const deletedIds = await rememberDeleted(workspaceId, stored, sanitizeIds(payload.deletedIds), restored.size > 0);
+      const removed = new Set(deletedIds);
+      const transactions = sanitizeTransactions(payload.transactions).filter((item) => !removed.has(item.id));
       await writeState(workspaceId, transactions);
-      return respond(200, { transactions, updatedAt: new Date().toISOString(), storage: "netlify-database" });
+      return respond(200, { transactions, deletedIds, updatedAt: new Date().toISOString(), storage: "netlify-database" });
     }
 
     return respond(405, { error: "Method not allowed" });
@@ -64,6 +75,49 @@ exports.handler = async (event) => {
 };
 
 async function readState(workspaceId) {
+  const state = await readTransactionState(workspaceId);
+  const deletedIds = await readDeletedIds(workspaceId);
+  const removed = new Set(deletedIds);
+  return { ...state, transactions: state.transactions.filter((item) => !removed.has(item.id)), deletedIds };
+}
+
+async function readDeletedIds(workspaceId) {
+  const pool = await getDatabasePool();
+  await ensureDatabaseTable(pool);
+  const result = await pool.query(
+    "select state_value, updated_at from finance_workspace_state where state_key = $1 limit 1",
+    [createDeletedKey(workspaceId)],
+  );
+  return sanitizeIds(result.rows[0]?.state_value);
+}
+
+// Adds ids to the workspace's deleted list (newest kept when it is full) and writes it if it changed.
+async function rememberDeleted(workspaceId, current, added, force = false) {
+  const merged = [...new Set([...current, ...added])].slice(-MAX_DELETED_IDS);
+  if (!force && merged.length === current.length) return current;
+  const pool = await getDatabasePool();
+  await ensureDatabaseTable(pool);
+  await pool.query(
+    `
+      insert into finance_workspace_state (state_key, state_value, updated_at, migrated_from)
+      values ($1, $2::jsonb, $3::timestamptz, nullif($4, ''))
+      on conflict (state_key)
+      do update set
+        state_value = excluded.state_value,
+        updated_at = excluded.updated_at,
+        migrated_from = coalesce(finance_workspace_state.migrated_from, excluded.migrated_from)
+    `,
+    [createDeletedKey(workspaceId), JSON.stringify(merged), new Date().toISOString(), ""],
+  );
+  return merged;
+}
+
+function sanitizeIds(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id) => typeof id === "string" && id.trim() && id.length <= 200).map((id) => id.trim()).slice(-MAX_DELETED_IDS);
+}
+
+async function readTransactionState(workspaceId) {
   const stateKey = createStateKey(workspaceId);
   const databaseState = await readDatabaseState(stateKey);
   if (databaseState) {
@@ -352,6 +406,10 @@ function sanitizeWorkspace(value) {
 
 function createStateKey(workspaceId) {
   return `transactions:${workspaceId}`;
+}
+
+function createDeletedKey(workspaceId) {
+  return `deleted:${workspaceId}`;
 }
 
 function respond(statusCode, payload) {
