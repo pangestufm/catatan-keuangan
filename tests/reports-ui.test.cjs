@@ -64,5 +64,20 @@ test('membuka Laporan hanya membaca: penyimpanan transaksi dan pembukuan tidak b
   app.window.document.querySelector('[data-report-mode="year"]').click();
   app.window.FinancialBooks.navigate('dashboard');
   assert.deepEqual(snapshot(), before);
-  assert.match(app.get('balanceBody').textContent, /Tabungan lama/, 'rekening lama tetap terbaca di neraca');
+});
+
+test('neraca hanya dari transaksi harian: buku Simpanan/Cicilan diabaikan, setoran tabungan dan cicilan dari transaksi', t => {
+  const app = createApp(rows); t.after(app.close);
+  const books = { books: { accounts: [{ id: 'lama', kind: 'savings', name: 'Tabungan lama', startDate: '2026-01-01', totalAmount: 0, openingBalance: 5000000, notes: '' }], entries: [] }, baseBooks: { accounts: [], entries: [] }, pending: [], revision: 3 };
+  app.window.localStorage.setItem('catatan-keuangan-books-v1-regression-fixture', JSON.stringify(books));
+  app.window.FinancialBooks.startSession({ workspaceId: 'regression-fixture', accessToken: '', isLocalOnly: true });
+  app.window.FinancialBooks.navigate('reports');
+  app.setValue('reportMonthInput', '2026-11');
+  const balance = app.get('balanceBody').textContent;
+  assert.doesNotMatch(balance, /Tabungan lama/, 'buku Simpanan tidak dipakai');
+  assert.match(balance, /Setoran bersih/);
+  assert.match(balance, /Rp\s2\.500\.000/, 'setoran Tabungan & Investasi dari transaksi');
+  assert.match(balance, /Cicilan/);
+  assert.match(balance, /Belum bisa dihitung/, 'sisa pokok cicilan tidak ada di transaksi');
+  assert.match(app.window.document.querySelectorAll('#scoreGrid .score-card')[3].textContent, /Data belum lengkap/);
 });

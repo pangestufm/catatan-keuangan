@@ -1,6 +1,7 @@
 // Report page (#laporan): scorecard of four health ratios, cash-flow statement and balance sheet
-// for a month or a year. Read-only: figures come from the daily ledger (window.FinanceData) and
-// the separate books (window.FinancialBooks); the only thing stored is the household choice.
+// for a month or a year. Read-only: every figure comes from the daily ledger (window.FinanceData);
+// the Cicilan/Simpanan books are a separate record and are not used. The only thing stored is the
+// household choice.
 (function () {
   'use strict';
   const Model = window.FinanceReportModel;
@@ -26,7 +27,6 @@
     return transactions().some((item) => /\banak\b/i.test(item.category || '')) ? 'child1' : 'single';
   }
   const transactions = () => window.FinanceData?.transactions() || [];
-  const books = () => window.FinancialBooks?.getBooks() || { accounts: [], entries: [] };
   const period = () => (view.mode === 'year' ? { mode: 'year', key: view.year } : { mode: 'month', key: view.month });
 
   function periodName(value) {
@@ -68,14 +68,13 @@
         <summary>Cara menghitung &amp; sumber standar</summary>
         <div class="report-method-body">
           <p><strong>Arus kas</strong> diambil dari transaksi harian, jadi sisa kas di laporan sama dengan saldo bersih di Ringkasan. Kategori <em>${esc(Model.SAVINGS_CATEGORY)}</em> dibaca sebagai setoran (pengeluaran) atau pencairan (pemasukan), bukan belanja atau penghasilan. Kategori <em>${esc(Model.DEBT_CATEGORY)}</em> dibaca sebagai cicilan.</p>
-          <p><strong>Neraca</strong> memakai saldo di buku Simpanan (tabungan, simpanan, investasi, aset lain) dan sisa kewajiban di buku Cicilan per akhir periode. Kas dari catatan harian adalah akumulasi pemasukan dikurangi pengeluaran sejak catatan pertama; saldo sebelum mulai mencatat tidak ikut terhitung.</p>
+          <p><strong>Neraca</strong> juga hanya dari transaksi harian; menu Cicilan dan Simpanan tidak dipakai. Kas adalah akumulasi pemasukan dikurangi pengeluaran sejak catatan pertama. Tabungan &amp; investasi adalah setoran dikurangi pencairan kategori <em>${esc(Model.SAVINGS_CATEGORY)}</em> sejak catatan pertama; simpanan yang sudah ada sebelum mulai mencatat tidak terhitung, jadi bila pencairan lebih besar dari setoran ditulis nol. Transaksi hanya mencatat pembayaran cicilan, bukan sisa pokoknya, jadi selama ada cicilan berjalan (dibayar dalam 3 bulan terakhir) kekayaan bersih dan solvabilitas belum bisa dihitung.</p>
           <ul>
             <li><strong>Rasio tabungan &amp; investasi</strong> = (setoran − pencairan tabungan &amp; investasi) ÷ pendapatan. Ideal 20% ke atas, minimal 10%.</li>
             <li><strong>Rasio cicilan utang (DSR)</strong> = cicilan ÷ pendapatan. Ideal maksimal 30%, batas atas 35%.</li>
-            <li><strong>Likuiditas dana darurat</strong> = (kas, tabungan dan simpanan) ÷ rata-rata pengeluaran bulanan (pengeluaran hidup + cicilan, maksimal 3 bulan terakhir yang ada pengeluarannya). Target: lajang 3-6 bulan, menikah 6 bulan, menikah dengan anak 9-12 bulan.</li>
+            <li><strong>Likuiditas dana darurat</strong> = (kas + tabungan &amp; investasi) ÷ rata-rata pengeluaran bulanan (pengeluaran hidup + cicilan, maksimal 3 bulan terakhir yang ada pengeluarannya). Target: lajang 3-6 bulan, menikah 6 bulan, menikah dengan anak 9-12 bulan.</li>
             <li><strong>Rasio solvabilitas</strong> = kekayaan bersih ÷ total aset. Ideal 50% ke atas; di bawah 0% berarti utang lebih besar dari aset.</li>
           </ul>
-          <p>Bila setoran atau cicilan tercatat di transaksi harian dan juga di buku Simpanan/Cicilan, rasio memakai angka yang lebih besar agar tidak terhitung dua kali.</p>
           <p class="muted">Standar adalah patokan umum perencana keuangan, bukan aturan resmi: <a href="https://www.ocbc.id/id/article/2023/01/31/cek-kesehatan-keuangan" target="_blank" rel="noopener noreferrer">OCBC</a>, <a href="https://pegadaian.co.id/artikel/keuangan/3-cara-evaluasi-keuangan-untuk-perencanaan-keuangan" target="_blank" rel="noopener noreferrer">Pegadaian</a>, <a href="https://www.idntimes.com/business/finance/ukuran-untuk-mengetahui-keuangan-yang-sehat-00-3m8tp-zd8wnx" target="_blank" rel="noopener noreferrer">IDN Times</a>, <a href="https://pegadaian.co.id/artikel/keuangan/ketahui-berapa-dana-darurat-yang-wajib-kamu-punya" target="_blank" rel="noopener noreferrer">dana darurat menurut status keluarga</a>, dan OJK Sikapi Uangmu (3-6 bulan untuk lajang).</p>
         </div>
       </details>`;
@@ -109,7 +108,6 @@
 
   function scoreCards(result) {
     const { savings, debt, liquidity, solvency, target } = result;
-    const link = (route, text) => `<a href="#${route === 'savings' ? 'simpanan' : 'cicilan'}" data-book-route="${route}">${text}</a>`;
     const savingsNote = savings.status === 'na' ? 'Belum ada pendapatan pada periode ini.'
       : savings.status === 'good' ? 'Di atas ideal. Pertahankan.'
       : savings.status === 'fair' ? `Tambah ${money(Math.ceil(0.2 * savings.denominator - savings.numerator))} lagi untuk ideal 20%.`
@@ -120,11 +118,10 @@
       : debt.status === 'fair' ? `Lewat ideal ${money(debt.excess)}. Tahan cicilan baru.`
       : `Turunkan ${money(Math.ceil(debt.numerator - 0.35 * debt.denominator))} agar di bawah 35%.`;
     const liquidityNote = liquidity.status === 'na' ? 'Belum ada pengeluaran untuk dijadikan patokan.'
-      : liquidity.status === 'incomplete' ? `Hanya dari kas harian. ${link('savings', 'Catat saldo tabungan')} supaya akurat.`
       : liquidity.status === 'good' ? `Aman untuk target ${target} bulan.`
       : `Kurang ${money(liquidity.gap)} untuk target ${target} bulan.`;
     const solvencyNote = solvency.status === 'na' ? 'Belum ada aset tercatat.'
-      : solvency.status === 'incomplete' ? `Neraca baru berisi kas harian. ${link('savings', 'Isi aset')} dan ${link('installments', 'cicilan')}.`
+      : solvency.status === 'incomplete' ? 'Ada cicilan berjalan, tapi sisa pokoknya tidak ada di transaksi. Kekayaan bersih belum bisa dihitung.'
       : solvency.status === 'good' ? 'Kekayaan bersih lebih dari separuh aset.'
       : solvency.status === 'fair' ? 'Utang masih lebih dari separuh aset.'
       : 'Utang lebih besar dari seluruh aset.';
@@ -146,7 +143,7 @@
         extra: result.spending.months.length ? `Rata-rata ${result.spending.months.length} bulan pengeluaran` : '' },
       { key: 'solvency', title: 'Rasio solvabilitas', icon: 'scale', data: solvency,
         value: solvency.value === null ? '–' : percent(solvency.value), formula: 'kekayaan bersih ÷ total aset',
-        figures: `${signed(solvency.numerator)} ÷ ${money(solvency.denominator)}`, ideal: Model.STANDARDS.solvency.text,
+        figures: solvency.numerator === null ? `? ÷ ${money(solvency.denominator)}` : `${signed(solvency.numerator)} ÷ ${money(solvency.denominator)}`, ideal: Model.STANDARDS.solvency.text,
         gauge: gauge(solvency.value, 1, [[0.5, '50%']]), note: solvencyNote, extra: '' },
     ];
     get('scoreGrid').innerHTML = cards.map((card) => `
@@ -207,28 +204,33 @@
   }
 
   function balanceTable(sheet) {
-    const rows = (items, empty) => items.length
-      ? items.map((item) => `<li><span>${esc(item.name)}</span><span class="numeric">${signed(item.amount)}</span></li>`).join('')
-      : `<li class="balance-empty"><span>${esc(empty)}</span><span class="numeric">${money(0)}</span></li>`;
-    const group = (title, items, subtotal, empty, extra = '') => `<div class="balance-group"><h5>${esc(title)}</h5><ul>${extra}${rows(items, empty)}</ul><p class="balance-subtotal"><span>Jumlah</span><span class="numeric">${signed(subtotal)}</span></p></div>`;
-    const cashRow = `<li><span>Kas dari catatan harian<small>${sheet.cash < 0 ? 'Negatif: saldo sebelum mulai mencatat belum masuk' : 'Akumulasi pemasukan − pengeluaran'}</small></span><span class="numeric ${sheet.cash < 0 ? 'negative' : ''}">${signed(sheet.cash)}</span></li>`;
-    const { groups } = sheet;
-    const debts = groups.installment.filter((item) => item.amount > 0)
-      .map((item) => ({ ...item, note: `dari ${money(item.total)}` }));
-    const callout = sheet.accounts ? '' : `<p class="balance-callout">${icon('notebook-pen')}<span>Neraca baru berisi kas dari catatan harian. Catat saldo tabungan, deposito, investasi dan aset lain (rumah, kendaraan, emas) di <a href="#simpanan" data-book-route="savings">Simpanan</a>, lalu utang berjalan di <a href="#cicilan" data-book-route="installments">Cicilan</a>.</span></p>`;
+    const since = sheet.firstDate ? `sejak ${dateName(sheet.firstDate)}` : 'sejak catatan pertama';
+    const line = (label, note, amount, className = '') => `<li class="${className}"><span>${esc(label)}${note ? `<small>${esc(note)}</small>` : ''}</span><span class="numeric ${amount < 0 ? 'negative' : ''}">${signed(amount)}</span></li>`;
+    const group = (title, items, subtotal) => `<div class="balance-group"><h5>${esc(title)}</h5><ul>${items}</ul><p class="balance-subtotal"><span>Jumlah</span><span class="numeric">${signed(subtotal)}</span></p></div>`;
+    const { savings } = sheet;
+    const cashRow = line('Kas dari catatan harian', sheet.cash < 0 ? 'Negatif: saldo sebelum mulai mencatat belum masuk' : `Akumulasi pemasukan − pengeluaran ${since}`, sheet.cash);
+    const savingsRow = savings.deposited || savings.withdrawn
+      ? line('Setoran bersih', `Disetor ${money(savings.deposited)} − dicairkan ${money(savings.withdrawn)}${savings.withdrawn > savings.deposited ? '; pencairan dari simpanan lama ditulis nol' : ''}`, savings.amount)
+      : line('Belum ada setoran tabungan & investasi', '', 0, 'balance-empty');
+    const debtRows = sheet.installments.length
+      ? sheet.installments.map((item) => `<li><span>${esc(item.name)}<small>Dibayar terakhir ${esc(dateName(item.lastDate))} · per bulan</small></span><span class="numeric">${money(item.monthly)}</span></li>`).join('')
+      : `<li class="balance-empty"><span>Tidak ada cicilan dibayar 3 bulan terakhir</span><span class="numeric">${money(0)}</span></li>`;
+    const known = sheet.debtsKnown;
+    const callout = `<p class="balance-callout">${icon('notebook-pen')}<span>Dihitung dari transaksi harian ${esc(since)}. ${known ? 'Tidak ada cicilan berjalan, jadi kekayaan bersih sama dengan total aset.' : 'Transaksi hanya mencatat pembayaran cicilan, bukan sisa pokoknya, jadi kekayaan bersih belum bisa dihitung.'}</span></p>`;
     return `${callout}<div class="balance-sheet">
       <section class="balance-side" aria-label="Aset">
         <h4>Aset</h4>
-        ${group('Aset lancar', [...groups.savings, ...groups.deposit], sheet.liquid, 'Belum ada tabungan atau simpanan', cashRow)}
-        ${group('Investasi', groups.investment, sheet.investments, 'Belum ada investasi')}
-        ${group('Aset lain', groups.asset, sheet.otherAssets, 'Belum ada aset lain')}
+        ${group('Aset lancar', cashRow, sheet.cash)}
+        ${group('Tabungan & investasi', savingsRow, savings.amount)}
         <p class="balance-total"><span>Total aset</span><span class="numeric">${signed(sheet.totalAssets)}</span></p>
       </section>
       <section class="balance-side" aria-label="Kewajiban dan kekayaan bersih">
         <h4>Kewajiban &amp; kekayaan bersih</h4>
-        <div class="balance-group"><h5>Cicilan berjalan</h5><ul>${debts.length ? debts.map((item) => `<li><span>${esc(item.name)}<small>${esc(item.note)}</small></span><span class="numeric">${money(item.amount)}</span></li>`).join('') : `<li class="balance-empty"><span>Tidak ada cicilan berjalan</span><span class="numeric">${money(0)}</span></li>`}</ul><p class="balance-subtotal"><span>Total kewajiban</span><span class="numeric">${money(sheet.liabilities)}</span></p></div>
-        <div class="balance-group net-worth"><h5>Kekayaan bersih</h5><p class="net-worth-figure"><span class="marked numeric ${sheet.netWorth < 0 ? 'negative' : ''}">${signed(sheet.netWorth)}</span></p><small>Total aset − total kewajiban</small></div>
-        <p class="balance-total"><span>Kewajiban + kekayaan bersih</span><span class="numeric">${signed(sheet.liabilities + sheet.netWorth)}</span></p>
+        <div class="balance-group"><h5>Cicilan berjalan</h5><ul>${debtRows}</ul><p class="balance-subtotal"><span>Sisa utang</span><span class="numeric">${known ? money(0) : 'Belum tercatat'}</span></p></div>
+        <div class="balance-group net-worth"><h5>Kekayaan bersih</h5>${known
+          ? `<p class="net-worth-figure"><span class="marked numeric ${sheet.netWorth < 0 ? 'negative' : ''}">${signed(sheet.netWorth)}</span></p><small>Total aset − total kewajiban</small>`
+          : `<p class="net-worth-figure net-worth-unknown"><span class="numeric">Belum bisa dihitung</span></p><small>Perlu sisa pokok cicilan. Angka per bulan di atas adalah pembayaran, bukan utang.</small>`}</div>
+        ${known ? `<p class="balance-total"><span>Kewajiban + kekayaan bersih</span><span class="numeric">${signed(sheet.liabilities + sheet.netWorth)}</span></p>` : ''}
       </section>
     </div>`;
   }
@@ -256,8 +258,7 @@
     view.dirty = false;
     view.household = view.household || household();
     const list = transactions();
-    const bookData = books();
-    const periods = Model.availablePeriods(list, bookData);
+    const periods = Model.availablePeriods(list);
     if (!view.chosen) {
       // Open on the newest month that has records (not a future-dated one), not an empty month.
       const latest = periods.months.find((key) => key <= view.month);
@@ -265,7 +266,7 @@
     }
     syncControls(periods);
     const current = period();
-    const result = Model.ratios(list, bookData, current, view.household);
+    const result = Model.ratios(list, current, view.household);
     const before = Model.statement(list, Model.previous(current));
     const bounds = Model.range(current);
     get('reportPeriodLine').textContent = `${periodName(current)} · ${result.statement.count} transaksi harian`;
@@ -288,7 +289,6 @@
   }
 
   window.addEventListener('finance:data', schedule);
-  window.addEventListener('finance:books', schedule);
   window.addEventListener('finance:route', (event) => { if (event.detail?.route === 'reports') render(); });
   scaffold();
   window.FinanceReport = { render };

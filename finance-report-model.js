@@ -1,10 +1,12 @@
 // Family financial report: cash-flow statement, balance sheet and four health ratios.
-// Pure functions over the daily ledger and the separate books; nothing here reads or writes storage.
+// Pure functions over the daily ledger only; nothing here reads or writes storage. The separate
+// Cicilan/Simpanan books are their own record and are deliberately not mixed in.
 //
 // Flows come from the daily ledger, the same cash book the dashboard totals, so "sisa kas" here
 // always equals the dashboard's net balance for the period. Two categories are not spending:
 // "Tabungan & Investasi" moves money into savings (expense) or back out (income), and
-// "Kewajiban & Cicilan" is debt service. Balances (assets and debts) come from the books.
+// "Kewajiban & Cicilan" is debt service. The ledger records flows, not balances: savings held
+// before the first record and the remaining principal of a loan are not in it.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.FinanceReportModel = factory();
@@ -97,55 +99,67 @@
     return result;
   }
 
-  // Movements recorded in the separate books during a period. Revaluing an "asset" (house, car,
-  // gold) is not saving, so only cash-like accounts count as deposits and withdrawals.
-  function bookFlows(books, period) {
-    const bounds = range(period);
-    const kinds = new Map((books?.accounts || []).map((account) => [account.id, account.kind]));
-    const flows = { payments: 0, deposits: 0, withdrawals: 0 };
-    for (const entry of books?.entries || []) {
-      if (!within(entry, bounds)) continue;
-      const kind = kinds.get(entry.accountId);
-      if (entry.kind === "payment" && kind === "installment") flows.payments += entry.amount;
-      else if (kind && kind !== "installment" && kind !== "asset") {
-        if (entry.kind === "deposit") flows.deposits += entry.amount;
-        if (entry.kind === "withdrawal") flows.withdrawals += entry.amount;
-      }
-    }
-    return flows;
+  // One installment is written many ways ("Cicilan CC", "Bayar Cc", "CC Bulan Juni"), so payments
+  // are grouped by what is left of the description after the usual verbs and month names.
+  const MONTH_WORDS = "januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|agt|sep|okt|nov|des";
+  function installmentKey(description) {
+    const key = String(description || "").toLowerCase()
+      .replace(/\b(cicilan|angsuran|bayar|pembayaran|pelunasan|tagihan)\b/g, " ")
+      .replace(new RegExp(`\\b(bulan|bln)?\\s*(${MONTH_WORDS})\\b`, "g"), " ")
+      .replace(/\b\d{2,4}\b/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    return key || "cicilan";
   }
 
-  function balanceSheet(transactions, books, asOf) {
+  // Installments paid in the three months up to asOf. The ledger only holds payments, so this
+  // lists what is being paid each month; the remaining principal is not known.
+  function activeInstallments(transactions, asOf) {
+    const [year, month] = asOf.slice(0, 7).split("-").map(Number);
+    const from = month > 2 ? `${year}-${pad(month - 2)}` : `${year - 1}-${pad(month + 10)}`;
+    const groups = new Map();
+    for (const item of transactions) {
+      if (item.type !== "expense" || item.category !== DEBT_CATEGORY || typeof item.date !== "string" || item.date > asOf) continue;
+      const key = installmentKey(item.description);
+      const group = groups.get(key) || { key, name: "", lastDate: "", months: new Map() };
+      const monthKey = item.date.slice(0, 7);
+      group.months.set(monthKey, (group.months.get(monthKey) || 0) + amountOf(item));
+      if (item.date >= group.lastDate) { group.lastDate = item.date; group.name = String(item.description || "").trim() || "Cicilan"; }
+      groups.set(key, group);
+    }
+    return [...groups.values()]
+      .filter((group) => group.lastDate.slice(0, 7) >= from)
+      .map((group) => ({ key: group.key, name: group.name, lastDate: group.lastDate, monthly: group.months.get(group.lastDate.slice(0, 7)), paid: [...group.months.values()].reduce((sum, value) => sum + value, 0) }))
+      .sort((a, b) => b.monthly - a.monthly || a.name.localeCompare(b.name, "id-ID"));
+  }
+
+  // Balance sheet as of a date, from the ledger alone. Cash is every income minus every expense
+  // since the first record. Savings are deposits minus withdrawals in "Tabungan & Investasi" since
+  // that first record; withdrawing more than was deposited means older savings were cashed, so it
+  // is shown as zero rather than negative. Debts are known only when no installment is being paid.
+  function balanceSheet(transactions, asOf) {
     let cash = 0;
+    let firstDate = "";
+    const savings = { deposited: 0, withdrawn: 0, amount: 0 };
     for (const item of transactions) {
       if (typeof item.date !== "string" || item.date > asOf) continue;
-      if (item.type === "income") cash += amountOf(item);
-      else if (item.type === "expense") cash -= amountOf(item);
+      if (!firstDate || item.date < firstDate) firstDate = item.date;
+      const amount = amountOf(item);
+      if (item.type === "income") cash += amount;
+      else if (item.type === "expense") cash -= amount;
+      if (item.category !== SAVINGS_CATEGORY) continue;
+      if (item.type === "expense") savings.deposited += amount;
+      else if (item.type === "income") savings.withdrawn += amount;
     }
-    const entries = (books?.entries || []).filter((entry) => entry.date <= asOf);
-    const groups = { savings: [], deposit: [], investment: [], asset: [], installment: [] };
-    for (const account of books?.accounts || []) {
-      if (account.startDate > asOf || !groups[account.kind]) continue;
-      const own = entries.filter((entry) => entry.accountId === account.id);
-      if (account.kind === "installment") {
-        const paid = own.reduce((sum, entry) => sum + entry.amount, 0);
-        groups.installment.push({ id: account.id, name: account.name, kind: account.kind, amount: Math.max(0, account.totalAmount - paid), total: account.totalAmount, paid });
-      } else {
-        const amount = own.reduce((sum, entry) => sum + (entry.kind === "withdrawal" ? -entry.amount : entry.amount), account.openingBalance);
-        groups[account.kind].push({ id: account.id, name: account.name, kind: account.kind, amount });
-      }
-    }
-    const sum = (rows) => rows.reduce((value, row) => value + row.amount, 0);
-    const liquid = cash + sum(groups.savings) + sum(groups.deposit);
-    const totalAssets = liquid + sum(groups.investment) + sum(groups.asset);
-    const liabilities = sum(groups.installment);
+    savings.amount = Math.max(0, savings.deposited - savings.withdrawn);
+    const installments = activeInstallments(transactions, asOf);
+    const debtsKnown = installments.length === 0;
+    const totalAssets = cash + savings.amount;
     return {
-      asOf, cash, groups, liquid,
-      liquidForRatio: Math.max(0, cash) + sum(groups.savings) + sum(groups.deposit),
-      investments: sum(groups.investment), otherAssets: sum(groups.asset),
-      totalAssets, liabilities, netWorth: totalAssets - liabilities,
-      cashAccounts: groups.savings.length + groups.deposit.length,
-      accounts: Object.values(groups).reduce((count, rows) => count + rows.length, 0),
+      asOf, firstDate, cash, savings, installments, debtsKnown, totalAssets,
+      liquidForRatio: Math.max(0, cash) + savings.amount,
+      liabilities: debtsKnown ? 0 : null,
+      netWorth: debtsKnown ? totalAssets : null,
     };
   }
 
@@ -174,41 +188,37 @@
     return value >= STANDARDS.solvency.good ? "good" : value >= STANDARDS.solvency.fair ? "fair" : "poor";
   }
 
-  function ratios(transactions, books, period, household = "child1") {
+  function ratios(transactions, period, household = "child1") {
     const flow = statement(transactions, period);
-    const booked = bookFlows(books, period);
-    const sheet = balanceSheet(transactions, books, range(period).end);
+    const sheet = balanceSheet(transactions, range(period).end);
     const spending = monthlySpending(transactions, period);
     const target = (HOUSEHOLDS[household] || HOUSEHOLDS.child1).months;
-    // A payment or deposit may be recorded in the daily ledger, in a book, or in both. The larger of
-    // the two is used so nothing is counted twice and nothing recorded only in a book is missed.
-    const debtPaid = Math.max(flow.debtPayments, booked.payments);
-    const saved = Math.max(flow.deposits, booked.deposits) - Math.max(flow.withdrawals, booked.withdrawals);
+    const saved = flow.deposits - flow.withdrawals;
     const perIncome = (value) => (flow.revenue > 0 ? value / flow.revenue : null);
     const savingsRate = perIncome(saved);
-    const debtRatio = perIncome(debtPaid);
+    const debtRatio = perIncome(flow.debtPayments);
     const liquidity = spending.average > 0 ? sheet.liquidForRatio / spending.average : null;
-    const solvency = sheet.totalAssets > 0 ? sheet.netWorth / sheet.totalAssets : null;
+    // Without the remaining principal of the installments being paid, net worth is unknown; a
+    // ratio computed as if there were no debt would read as falsely healthy.
+    const solvency = sheet.debtsKnown && sheet.totalAssets > 0 ? sheet.netWorth / sheet.totalAssets : null;
     return {
-      period, statement: flow, booked, sheet, spending, household, target,
+      period, statement: flow, sheet, spending, household, target,
       savings: {
         value: savingsRate, status: grade("savings", savingsRate), numerator: saved, denominator: flow.revenue,
         gap: flow.revenue > 0 ? Math.max(0, Math.ceil(STANDARDS.savings.fair * flow.revenue - saved)) : 0,
         withSurplus: perIncome(saved + Math.max(0, flow.cashChange)),
-        fromBooks: booked.deposits > flow.deposits || booked.withdrawals > flow.withdrawals,
       },
       debt: {
-        value: debtRatio, status: grade("debt", debtRatio), numerator: debtPaid, denominator: flow.revenue,
-        excess: flow.revenue > 0 ? Math.max(0, Math.ceil(debtPaid - STANDARDS.debt.good * flow.revenue)) : 0,
-        fromBooks: booked.payments > flow.debtPayments,
+        value: debtRatio, status: grade("debt", debtRatio), numerator: flow.debtPayments, denominator: flow.revenue,
+        excess: flow.revenue > 0 ? Math.max(0, Math.ceil(flow.debtPayments - STANDARDS.debt.good * flow.revenue)) : 0,
       },
       liquidity: {
-        value: liquidity, status: sheet.cashAccounts ? grade("liquidity", liquidity, household) : liquidity === null ? "na" : "incomplete",
+        value: liquidity, status: grade("liquidity", liquidity, household),
         numerator: sheet.liquidForRatio, denominator: spending.average,
         gap: spending.average > 0 ? Math.max(0, Math.ceil(target * spending.average - sheet.liquidForRatio)) : 0,
       },
       solvency: {
-        value: solvency, status: sheet.accounts ? grade("solvency", solvency) : solvency === null ? "na" : "incomplete",
+        value: solvency, status: sheet.debtsKnown ? grade("solvency", solvency) : "incomplete",
         numerator: sheet.netWorth, denominator: sheet.totalAssets,
       },
     };
@@ -219,9 +229,9 @@
   }
 
   // Years and months that have any record, newest first, for the period pickers.
-  function availablePeriods(transactions, books) {
+  function availablePeriods(transactions) {
     const months = new Set();
-    for (const item of [...transactions, ...(books?.entries || []), ...(books?.accounts || []).map((account) => ({ date: account.startDate }))]) {
+    for (const item of transactions) {
       if (typeof item.date === "string" && /^\d{4}-\d{2}/.test(item.date)) months.add(item.date.slice(0, 7));
     }
     const list = [...months].sort().reverse();
@@ -230,6 +240,6 @@
 
   return {
     SAVINGS_CATEGORY, DEBT_CATEGORY, HOUSEHOLDS, STANDARDS,
-    range, previous, monthsOf, statement, bookFlows, balanceSheet, monthlySpending, grade, ratios, yearBreakdown, availablePeriods,
+    range, previous, monthsOf, statement, installmentKey, activeInstallments, balanceSheet, monthlySpending, grade, ratios, yearBreakdown, availablePeriods,
   };
 });
