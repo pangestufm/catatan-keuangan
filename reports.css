@@ -85,6 +85,7 @@
 .balance-total { display: flex; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 2px solid var(--ink); font-weight: 800; font-size: 16px; }
 .net-worth-figure { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1.2; margin: 4px 0 2px; }
 .net-worth-figure .marked { white-space: normal; }
+.net-worth-figure.net-worth-unknown { font-size: 20px; letter-spacing: -.01em; color: var(--muted); }
 
 /* ---------- Method ---------- */
 .report-method { border: 1.5px dashed var(--control-border); border-radius: var(--radius); padding: 0 22px; background: transparent; }
