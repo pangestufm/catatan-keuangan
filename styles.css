@@ -68,6 +68,12 @@ input:not([type='checkbox']):hover, select:hover, textarea:hover { border-color:
 input:not([type='checkbox']):focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 input[type='date'], input[type='month'] { min-width: 0; }
+/* iOS Safari gives date and month fields a built-in width that ignores the flex layout, so the
+   month field ran under the "Semua bulan" button beside it. */
+@supports (-webkit-touch-callout: none) {
+  input[type='date'], input[type='month'] { -webkit-appearance: none; appearance: none; display: block; text-align: left; }
+  input[type='date']::-webkit-date-and-time-value, input[type='month']::-webkit-date-and-time-value { text-align: left; }
+}
 textarea { resize: vertical; max-height: 260px; line-height: 1.5; }
 input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex-shrink: 0; }
 
