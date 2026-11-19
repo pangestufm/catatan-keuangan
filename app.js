@@ -8,6 +8,7 @@ const API_URLS = ["/.netlify/functions/transactions", "api/transactions.php"];
 const PARSE_API_URLS = ["/.netlify/functions/parse-transaction"];
 const BANK_STATEMENT_API_URL = "/.netlify/functions/parse-bank-statement";
 const BANK_STATEMENT_MAX_FILE_SIZE = 3.5 * 1024 * 1024;
+const CHAT_ENTRY_LIMIT = 15;
 const DEFAULT_CATEGORIES = [
   "Gaji",
   "Bonus",
@@ -76,6 +77,7 @@ const state = {
   isLocalOnly: false,
   lastOnlineError: "",
   pendingDraft: null,
+  pendingDrafts: [],
   bankImportDrafts: [],
   bankImportFileName: "",
   pdfJsPromise: null,
@@ -88,6 +90,9 @@ const state = {
     search: "",
   },
 };
+
+// Read-only copies for the report page; the ledger itself only changes through this file.
+window.FinanceData = { transactions: () => state.transactions.map((item) => ({ ...item })) };
 
 const elements = {
   form: document.querySelector("#transactionForm"),
@@ -145,6 +150,11 @@ const elements = {
   chatStatus: document.querySelector("#chatStatus"),
   voiceButton: document.querySelector("#voiceButton"),
   draftCard: document.querySelector("#draftCard"),
+  draftListCard: document.querySelector("#draftListCard"),
+  draftListRows: document.querySelector("#draftListRows"),
+  draftListTitle: document.querySelector("#draftListTitle"),
+  draftListTotal: document.querySelector("#draftListTotal"),
+  cancelDraftListButton: document.querySelector("#cancelDraftListButton"),
   draftDateInput: document.querySelector("#draftDateInput"),
   draftTypeInput: document.querySelector("#draftTypeInput"),
   draftCategoryInput: document.querySelector("#draftCategoryInput"),
@@ -263,6 +273,14 @@ function bindEvents() {
   elements.confirmDraftButton.addEventListener("click", confirmDraftTransaction);
   elements.editDraftButton.addEventListener("click", editDraftManually);
   elements.cancelDraftButton.addEventListener("click", clearDraft);
+  elements.draftListCard.addEventListener("submit", confirmDraftList);
+  elements.draftListCard.addEventListener("input", handleDraftListInput);
+  elements.draftListCard.addEventListener("change", handleDraftListInput);
+  elements.draftListCard.addEventListener("click", handleDraftListClick);
+  elements.cancelDraftListButton.addEventListener("click", () => {
+    clearDraftList();
+    setChatStatus("Draft dibatalkan. Tidak ada yang disimpan.", "info");
+  });
   elements.quickEntryButton.addEventListener("click", openQuickEntryModal);
   elements.toolsPanelButton.addEventListener("click", toggleToolsPanel);
   elements.closeToolsPanelButton.addEventListener("click", () => closeToolsPanel(true));
@@ -371,6 +389,9 @@ function logout() {
   state.activeApiUrl = "";
   state.transactions = [];
   elements.accessTokenInput.value = "";
+  elements.chatInput.value = "";
+  clearDraft();
+  clearDraftList();
   render();
   showLogin();
 }
@@ -1348,8 +1369,19 @@ async function handleChatSubmit(event) {
   submit.disabled = true;
   elements.voiceButton.disabled = true;
   submit.textContent = "Membaca...";
+  const generation = state.sessionGeneration;
   try {
+    const parts = splitChatEntries(text);
+    if (parts.length > CHAT_ENTRY_LIMIT) {
+      setChatStatus(`Maksimal ${CHAT_ENTRY_LIMIT} transaksi sekali kirim. Kirim sisanya setelah ini.`, "error");
+      return;
+    }
+    if (parts.length > 1) {
+      await createDraftList(parts, generation);
+      return;
+    }
     const parsed = await parseChatTransactionSmart(text);
+    if (generation !== state.sessionGeneration) return;
     if (!parsed) {
       setChatStatus("Aku belum bisa menemukan nominalnya. Coba tulis seperti: belanja makanan 10000.", "error");
       return;
@@ -1366,6 +1398,181 @@ async function handleChatSubmit(event) {
     submit.innerHTML = `${window.DashboardUI.icon("sparkles")}Buat draft`;
     window.DashboardUI.refreshIcons();
   }
+}
+
+// One message may carry several transactions: one per line, or per part split by a comma, a
+// semicolon or a spoken "terus", "lalu" or "kemudian". A comma touching a digit is a decimal or
+// thousands mark ("1,5jt"), not a split. A part without a Rupiah amount ("makan siang, nasi padang
+// 25rb") belongs to the transaction around it, so a description with a comma stays one transaction.
+function splitChatEntries(text) {
+  const parts = text.split(/\r?\n|;|,(?!\d)|\s+(?:terus|lalu|kemudian)\s+/i).map((part) => part.trim()).filter(Boolean);
+  const entries = [];
+  let carry = "";
+  for (const part of parts) {
+    const joined = carry ? `${carry} ${part}` : part;
+    if (hasChatAmount(joined)) {
+      entries.push(joined);
+      carry = "";
+    } else carry = joined;
+  }
+  if (carry) {
+    if (entries.length) entries[entries.length - 1] = `${entries[entries.length - 1]} ${carry}`;
+    else entries.push(carry);
+  }
+  return entries;
+}
+
+function hasChatAmount(text) {
+  const candidate = extractAmountCandidate(text, extractDateCandidate(text));
+  return Boolean(candidate && (candidate.suffix || candidate.amount >= 1000 || /rp/i.test(candidate.raw)));
+}
+
+async function createDraftList(parts, generation) {
+  setChatStatus(`Agent sedang membaca ${parts.length} transaksi...`, "info");
+  const results = await mapWithLimit(parts, 4, async (part) => {
+    try {
+      return await parseChatTransactionSmart(part);
+    } catch {
+      return null;
+    }
+  });
+  if (generation !== state.sessionGeneration) return;
+  const drafts = [];
+  const missed = [];
+  let carriedDate = "";
+  results.forEach((parsed, index) => {
+    if (!parsed) {
+      missed.push(parts[index]);
+      return;
+    }
+    // A list often names its date once ("kemarin bakso 20rb, es teh 5rb"); later parts without
+    // their own date share it instead of falling back to today.
+    if (extractDateCandidate(parts[index]).start >= 0) carriedDate = parsed.date;
+    else if (carriedDate && parsed.date === getTodayInputValue()) parsed.date = carriedDate;
+    drafts.push(parsed);
+  });
+  if (!drafts.length) {
+    setChatStatus("Aku belum bisa menemukan nominalnya. Tulis satu transaksi per baris, misalnya: bensin 30rb.", "error");
+    return;
+  }
+  showDraftList(drafts);
+  elements.chatInput.value = missed.join("\n");
+  setChatStatus(missed.length
+    ? `${drafts.length} draft dibuat. ${missed.length} bagian belum terbaca nominalnya dan dikembalikan ke kolom chat.`
+    : `${drafts.length} draft dibuat. Cek dulu, lalu simpan semua.`, missed.length ? "error" : "info");
+}
+
+async function mapWithLimit(items, limit, task) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await task(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function showDraftList(drafts) {
+  window.DashboardUI.setEntryMode("chat");
+  clearDraft(false);
+  state.pendingDrafts = drafts.map((draft) => ({ ...draft }));
+  renderDraftList();
+  elements.draftListCard.classList.remove("hidden");
+}
+
+function renderDraftList() {
+  const drafts = state.pendingDrafts;
+  elements.draftListTitle.textContent = `Tinjau ${drafts.length} draft`;
+  elements.draftListRows.innerHTML = drafts.map((draft, index) => `
+    <fieldset class="draft-item" data-draft-index="${index}">
+      <legend>Draft ${index + 1}</legend>
+      <button class="icon-button draft-remove" type="button" data-draft-remove="${index}" aria-label="Buang draft ${index + 1}" title="Buang draft">${window.DashboardUI.icon("x")}</button>
+      <div class="draft-grid">
+        <label>Tanggal<input type="date" data-draft-field="date" value="${escapeHtml(draft.date)}" required /></label>
+        <label>Jenis<select data-draft-field="type" required><option value="income"${draft.type === "income" ? " selected" : ""}>Pemasukan</option><option value="expense"${draft.type === "expense" ? " selected" : ""}>Pengeluaran</option></select></label>
+        <label>Kategori<input type="text" data-draft-field="category" data-category-picker value="${escapeHtml(draft.category)}" required /></label>
+        <label>Nominal (Rp)<input type="text" data-draft-field="amount" inputmode="numeric" autocomplete="off" value="${escapeHtml(window.CurrencyInput.formatRupiahInput(draft.amount))}" required /></label>
+        <label class="full-width">Keterangan<input type="text" data-draft-field="description" value="${escapeHtml(draft.description)}" required /></label>
+      </div>
+    </fieldset>`).join("");
+  updateDraftListTotal();
+  window.DashboardUI.refreshIcons();
+}
+
+function handleDraftListInput(event) {
+  const field = event.target.dataset.draftField;
+  const row = event.target.closest("[data-draft-index]");
+  const draft = row && state.pendingDrafts[Number(row.dataset.draftIndex)];
+  if (!field || !draft) return;
+  if (field === "amount") {
+    window.CurrencyInput.formatElement(event.target);
+    draft.amount = window.CurrencyInput.parseRupiahInput(event.target.value);
+  } else {
+    draft[field] = event.target.value;
+  }
+  updateDraftListTotal();
+}
+
+function handleDraftListClick(event) {
+  const button = event.target.closest("[data-draft-remove]");
+  if (!button) return;
+  state.pendingDrafts.splice(Number(button.dataset.draftRemove), 1);
+  if (!state.pendingDrafts.length) {
+    clearDraftList();
+    setChatStatus("Semua draft dibuang. Tidak ada yang disimpan.", "info");
+    elements.chatInput.focus();
+    return;
+  }
+  renderDraftList();
+  elements.draftListRows.querySelector("[data-draft-remove]")?.focus();
+}
+
+function updateDraftListTotal() {
+  const sum = (type) => state.pendingDrafts
+    .filter((draft) => draft.type === type)
+    .reduce((total, draft) => total + (Number.isFinite(draft.amount) ? draft.amount : 0), 0);
+  const income = sum("income");
+  const expense = sum("expense");
+  elements.draftListTotal.textContent = [
+    income ? `Pemasukan ${formatCurrency(income)}` : "",
+    expense ? `Pengeluaran ${formatCurrency(expense)}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function confirmDraftList(event) {
+  event.preventDefault();
+  if (!state.pendingDrafts.length || !elements.draftListCard.reportValidity()) return;
+  const invalid = state.pendingDrafts.findIndex((draft) => (
+    !draft.date || !cleanText(draft.category) || !cleanText(draft.description)
+    || !Number.isFinite(draft.amount) || draft.amount <= 0
+  ));
+  if (invalid >= 0) {
+    setChatStatus(`Draft ${invalid + 1} belum lengkap: isi tanggal, kategori, keterangan, dan nominal yang valid.`, "error");
+    return;
+  }
+  const saved = state.pendingDrafts.map((draft) => createTransaction({
+    ...draft,
+    category: cleanText(draft.category),
+    description: cleanText(draft.description),
+  }));
+  state.transactions.unshift(...saved);
+  saved.forEach((transaction) => rememberCategory(transaction.description, transaction.category));
+  saveTransactions();
+  followTransactionPeriod(saved.map((transaction) => transaction.date).sort().at(-1));
+  render();
+  setChatStatus(`Tersimpan ${saved.length} transaksi sekaligus.`, "success");
+  clearDraftList();
+  closeQuickEntryModal();
+  window.DashboardUI.toast(`${saved.length} transaksi tersimpan.`);
+}
+
+function clearDraftList() {
+  state.pendingDrafts = [];
+  elements.draftListCard.classList.add("hidden");
+  elements.draftListRows.innerHTML = "";
 }
 
 function startVoiceInput() {
@@ -1413,6 +1620,7 @@ function startVoiceInput() {
 
 function showDraft(parsed) {
   window.DashboardUI.setEntryMode("chat");
+  clearDraftList();
   state.pendingDraft = parsed;
   elements.draftDateInput.value = parsed.date;
   elements.draftTypeInput.value = parsed.type;
@@ -1653,8 +1861,9 @@ function extractDateCandidate(text) {
     );
   }
 
-  const monthDate = lower.match(/\b(?:tgl|tanggal)?\s*(\d{1,2})\s+([a-z]+)(?:\s+(20\d{2}))?\b/);
-  if (monthDate && MONTH_NAMES[monthDate[2]] !== undefined) {
+  const monthDate = [...lower.matchAll(/\b(?:tgl|tanggal)?\s*(\d{1,2})\s*([a-z]+)(?:\s+(20\d{2}))?\b/g)]
+    .find((match) => MONTH_NAMES[match[2]] !== undefined);
+  if (monthDate) {
     const year = monthDate[3] ? Number(monthDate[3]) : today.getFullYear();
     return createDateCandidate(
       dateToInputValue(new Date(year, MONTH_NAMES[monthDate[2]], Number(monthDate[1]))),
@@ -1691,10 +1900,11 @@ function extractAmountCandidate(text, dateCandidate) {
     const end = start + match[0].length;
     if (dateCandidate && start >= dateCandidate.start && end <= dateCandidate.end) continue;
 
-    let amount = normalizeAmount(match[1]);
     const suffix = (match[2] || "").toLowerCase();
-    if (suffix === "rb" || suffix === "ribu" || suffix === "k") amount *= 1000;
-    if (suffix === "jt" || suffix === "juta") amount *= 1000000;
+    // "1,5jt" and "2.5rb" are fractions of the unit: rounding before scaling made 1,5jt into 2jt.
+    let amount = suffix ? parseScaledAmount(match[1]) : normalizeAmount(match[1]);
+    if (suffix === "rb" || suffix === "ribu" || suffix === "k") amount = Math.round(amount * 1000);
+    if (suffix === "jt" || suffix === "juta") amount = Math.round(amount * 1000000);
     if (!Number.isFinite(amount) || amount <= 0) continue;
 
     candidates.push({ amount, start, end, raw: match[0], suffix });
@@ -2530,6 +2740,12 @@ function parseAmount(value) {
   if (value === null || value === undefined || value === "") return 0;
   if (typeof value === "number") return Number.isFinite(value) ? Math.round(value) : 0;
   return normalizeAmount(String(value));
+}
+
+function parseScaledAmount(value) {
+  const cleaned = String(value).replace(/[^\d.,]/g, "");
+  const decimal = cleaned.match(/^(\d+)[.,](\d{1,2})$/);
+  return decimal ? Number(`${decimal[1]}.${decimal[2]}`) : normalizeAmount(cleaned);
 }
 
 function normalizeAmount(value) {

@@ -1,3 +1,5 @@
+const { checkAccess } = require("../shared/access.js");
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-App-Token, X-App-Workspace",
@@ -26,11 +28,8 @@ exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return respond(204, {});
   if (event.httpMethod !== "POST") return respond(405, { error: "Method not allowed" });
 
-  const requiredToken = process.env.APP_ACCESS_TOKEN || "";
-  if (requiredToken) {
-    const providedToken = event.headers["x-app-token"] || event.headers["X-App-Token"] || "";
-    if (providedToken !== requiredToken) return respond(401, { error: "Unauthorized" });
-  }
+  const denied = checkAccess(event);
+  if (denied) return respond(denied.status, { error: denied.error });
 
   try {
     if (!process.env.NEXOS_API_KEY) {

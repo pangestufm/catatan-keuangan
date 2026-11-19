@@ -1,3 +1,5 @@
+const { checkAccess } = require("../shared/access.js");
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, X-App-Token, X-App-Workspace",
@@ -13,13 +15,8 @@ exports.handler = async (event) => {
     return respond(204, {});
   }
 
-  const requiredToken = process.env.APP_ACCESS_TOKEN || "";
-  if (requiredToken) {
-    const providedToken = event.headers["x-app-token"] || event.headers["X-App-Token"] || "";
-    if (providedToken !== requiredToken) {
-      return respond(401, { error: "Unauthorized" });
-    }
-  }
+  const denied = checkAccess(event);
+  if (denied) return respond(denied.status, { error: denied.error });
 
   try {
     const method = event.httpMethod;
@@ -60,7 +57,9 @@ exports.handler = async (event) => {
 
     return respond(405, { error: "Method not allowed" });
   } catch (error) {
-    return respond(500, { error: "Server error", message: error.message });
+    // Details stay in the function log; the browser only learns that the request failed.
+    console.error("transactions", error);
+    return respond(500, { error: "Server error" });
   }
 };
 

@@ -6,7 +6,7 @@
 
   const MAX_ACCOUNTS = 1000;
   const MAX_ENTRIES = 10000;
-  const accountKinds = new Set(["installment", "savings", "investment", "deposit"]);
+  const accountKinds = new Set(["installment", "savings", "investment", "deposit", "asset"]);
   const entryKinds = new Set(["payment", "deposit", "withdrawal"]);
 
   function fail(message) {

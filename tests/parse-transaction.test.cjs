@@ -22,7 +22,7 @@ function useNexosEnvironment(t, model) {
   delete process.env.AI_PROVIDER;
   delete process.env.GEMINI_API_KEY;
   delete process.env.OPENAI_API_KEY;
-  delete process.env.APP_ACCESS_TOKEN;
+  process.env.APP_ACCESS_TOKEN = "test-token";
 
   t.after(() => {
     names.forEach((name) => {
@@ -35,7 +35,7 @@ function useNexosEnvironment(t, model) {
 function createEvent(overrides = {}) {
   return {
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       text: "bayar makan siang 75000",
       today: "2026-10-03",

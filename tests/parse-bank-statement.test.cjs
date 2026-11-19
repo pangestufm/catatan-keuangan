@@ -6,10 +6,14 @@ const { handler } = require("../netlify/functions/parse-bank-statement.js");
 function useNexosEnvironment(t) {
   const originalKey = process.env.NEXOS_API_KEY;
   const originalModel = process.env.NEXOS_MODEL;
+  const originalToken = process.env.APP_ACCESS_TOKEN;
   process.env.NEXOS_API_KEY = "test-nexos-key";
+  process.env.APP_ACCESS_TOKEN = "test-token";
   delete process.env.NEXOS_MODEL;
 
   t.after(() => {
+    if (originalToken === undefined) delete process.env.APP_ACCESS_TOKEN;
+    else process.env.APP_ACCESS_TOKEN = originalToken;
     if (originalKey === undefined) delete process.env.NEXOS_API_KEY;
     else process.env.NEXOS_API_KEY = originalKey;
     if (originalModel === undefined) delete process.env.NEXOS_MODEL;
@@ -69,7 +73,7 @@ test("mengirim dokumen teks ke Nexos DeepSeek V4.1 Flash", async (t) => {
 
   const response = await handler({
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       fileName: "mutasi.csv",
       mimeType: "text/csv",
@@ -107,7 +111,7 @@ test("mengirim setiap halaman gambar sebagai multimodal image_url", async (t) =>
 
   const response = await handler({
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       fileName: "mutasi.pdf",
       documentImages: [
@@ -138,7 +142,7 @@ test("menyembunyikan HTML upstream pada error Nexos", async (t) => {
 
   const response = await handler({
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       fileName: "mutasi.csv",
       documentText: "Tanggal,Keterangan,Debit\n2026-09-17,Taksi,85000",
@@ -181,7 +185,7 @@ test("membagi PDF teks panjang menjadi beberapa request lalu menggabungkan hasil
 
   const response = await handler({
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       fileName: "mutasi-10-halaman.pdf",
       documentText,
@@ -217,7 +221,7 @@ test("memberi Nexos waktu proses hingga mendekati batas function Netlify", async
 
   const response = await handler({
     httpMethod: "POST",
-    headers: {},
+    headers: { "x-app-token": "test-token" },
     body: JSON.stringify({
       fileName: "mutasi.csv",
       documentText: "Tanggal,Keterangan,Debit\n2026-09-17,Taksi,85000",
